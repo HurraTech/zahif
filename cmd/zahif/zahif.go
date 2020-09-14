@@ -116,7 +116,7 @@ func (z *zahifServer) IndexProgress(ctx context.Context, req *pb.IndexProgressRe
         Parallelism:     options.Parallelism,
     }
 
-    percentage, err := indexer.CheckProgress()
+    total, indexed, percentage, err := indexer.CheckProgress()
 
     if err != nil {
         log.Errorf("Error while checking on index %s progess: %v", req.IndexIdentifier, err)
@@ -124,7 +124,7 @@ func (z *zahifServer) IndexProgress(ctx context.Context, req *pb.IndexProgressRe
     }
     log.Debugf("Progress of index %s is at %f", req.IndexIdentifier, percentage)
 
-    return &pb.IndexProgressResponse{PercentageDone: float32(percentage)}, nil
+    return &pb.IndexProgressResponse{PercentageDone: float32(percentage), IndexedDocuments: indexed, TotalDoucments: total}, nil
 }
 
 func (z *zahifServer) DeleteIndex(ctx context.Context, req *pb.DeleteIndexRequest) (*pb.DeleteIndexResponse, error) {
@@ -137,7 +137,12 @@ func (z *zahifServer) DeleteIndex(ctx context.Context, req *pb.DeleteIndexReques
 }
 
 func (z *zahifServer) SearchIndex(ctx context.Context, req *pb.SearchIndexRequest) (*pb.SearchIndexResponse, error) {
-    results, _ := search.Query("Files", req.IndexIdentifier, req.Query, int(req.Limit), int(req.Offset))
+    log.Debugf("Recevied SearchIndex Request. IndexID=%s", req.IndexIdentifier)
+    results, err := search.Query("Files", req.IndexIdentifier, req.Query, int(req.Limit), int(req.Offset))
+    if err != nil {
+        return nil, fmt.Errorf("Error while fulfilling search request: %s", err)
+    }
+    log.Debugf("Search Results: %v", results)
     return &pb.SearchIndexResponse{Documents: results}, nil
 }
 

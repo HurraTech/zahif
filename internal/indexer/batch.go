@@ -56,27 +56,27 @@ func (z *BatchIndexer) Index() error {
     return nil
 }
 
-func (z *BatchIndexer) CheckProgress() (float64, error) {
+func (z *BatchIndexer) CheckProgress() (int, int, float64, error) {
     z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexIdentifier)
 
     if _, err := os.Stat(z.indexProgressFile); os.IsNotExist(err) {
         log.Debugf("Could not find progress file for index %s. Assuming progress is 0", z.IndexIdentifier)
-        return 0, nil
+        return 0, 0, 0, nil
     }
 
     f, err := os.Open(z.indexProgressFile)
     if err != nil {
-        return 0, fmt.Errorf("Could not open index progress file: %s: %s", z.indexProgressFile, err)
+        return 0, 0, 0, fmt.Errorf("Could not open index progress file: %s: %s", z.indexProgressFile, err)
     }
     defer f.Close()
 
     _, cur, total, err := readProgressFileValues(f)
 
     if err != nil {
-        return 0, fmt.Errorf("Error reading progres file values: %s", err)
+        return 0, 0, 0, fmt.Errorf("Error reading progres file values: %s", err)
     }
 
-    return math.Round((float64(cur) / float64(total)) * 100), nil
+    return total, cur, math.Round((float64(cur) / float64(total)) * 100), nil
 }
 
 func (z *BatchIndexer) DeleteIndex() error {

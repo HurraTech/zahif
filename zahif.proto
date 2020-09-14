@@ -26,6 +26,8 @@ message IndexProgressRequest {
 
 message IndexProgressResponse {
     float percentage_done = 1;
+    int32 indexed_documents = 2;
+    int32 total_documents = 3;
 }
 
 
