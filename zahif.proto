@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+option go_package = "proto";
+
+package proto;
+
+service Zahif {
+    rpc BatchIndex(BatchIndexRequest) returns (BatchIndexResponse) {}
+    rpc IndexProgress(IndexProgressRequest) returns (IndexProgressResponse) {}
+    rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse) {}  // can also be used for canceling on-going index request as well
+    rpc SearchIndex(SearchIndexRequest) returns (SearchIndexResponse) {}
+}
+
+message BatchIndexRequest {
+    string target = 1;
+    string index_identifier = 2;
+    repeated string exclude_patterns = 3;
+}
+
+message BatchIndexResponse {
+}
+
+message IndexProgressRequest {
+    string index_identifier = 1;
+}
+
+message IndexProgressResponse {
+    float percentage_done = 1;
+}
+
+
+message SearchIndexRequest {
+    string index_identifier = 1;
+    string query = 2;
+    int32 limit = 3;
+    int32 offset = 4;
+}
+
+message SearchIndexResponse {
+    repeated string documents = 1;
+}
+
+message DeleteIndexRequest {
+    string index_identifier = 1;
+}
+
+message DeleteIndexResponse {
+    int32 percentage_done = 1;
+}
