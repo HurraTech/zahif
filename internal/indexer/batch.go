@@ -76,7 +76,7 @@ func (z *BatchIndexer) CheckProgress() (int, int, float64, error) {
         return 0, 0, 0, fmt.Errorf("Error reading progres file values: %s", err)
     }
 
-    return total, cur, math.Round((float64(cur) / float64(total)) * 100), nil
+    return total, cur, math.Ceil((float64(cur) / float64(total)) * 100), nil
 }
 
 func (z *BatchIndexer) DeleteIndex() error {
@@ -99,8 +99,18 @@ func (z *BatchIndexer) buildIndexPlan() (int, error) {
     // Compile exclude patterns
     var compiledPatterns []*regexp.Regexp
     for _, pattern := range z.ExcludePatterns {
-        re := regexp.MustCompile(pattern)
-        compiledPatterns = append(compiledPatterns, re)
+        re, err := regexp.Compile(pattern)
+        if err == nil {
+            compiledPatterns = append(compiledPatterns, re)
+            log.Debugf("Added ExcludePattern: %s", pattern)
+        } else {
+            log.Warningf("Invalid regexp was provided in ExcludedPatterns, escaping pattern: %s", pattern)
+            re, err = regexp.Compile(regexp.QuoteMeta(pattern))
+            if err == nil {
+                compiledPatterns = append(compiledPatterns, re)
+                log.Debugf("Added Escaped ExcludePattern: %s", pattern)
+            }
+        }
     }
 
     totalDocs := 0
@@ -206,7 +216,7 @@ OUTER:
                 bulk = append(bulk, path)
                 if len(bulk) >= z.Parallelism {
                     z.indexFiles(bulk)
-                    log.Debugf("Indexed %d out of %d documents (index=%s, progress=%f)", posLine, totalDocs, z.IndexIdentifier, math.Round(float64(posLine)/float64(totalDocs)*100))
+                    log.Debugf("Indexed %d out of %d documents (index=%s, progress=%f)", posLine, totalDocs, z.IndexIdentifier, math.Ceil(float64(posLine)/float64(totalDocs)*100))
                     bulk = nil
                     z.saveProgress(pos, posLine, totalDocs)
                     continue OUTER

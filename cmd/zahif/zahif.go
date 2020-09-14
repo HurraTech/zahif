@@ -29,8 +29,13 @@ type Options struct {
 
 type zahifServer struct {
     pb.UnimplementedZahifServer
-    BatchQueue  *goque.Queue
-    DeleteQueue *goque.Queue
+    BatchQueue   *goque.Queue
+    ControlQueue *goque.Queue
+}
+
+type ControlIndexOp struct {
+    Type            string
+    IndexIdentifier string
 }
 
 var options Options
@@ -38,7 +43,7 @@ var ingester sonic.Ingestable
 var search sonic.Searchable
 var retriesQueue *goque.Queue
 var batchQueue *goque.Queue
-var deleteQueue *goque.Queue
+var controlQueue *goque.Queue
 var zahif zahifServer
 var interruptChannel chan string
 var currentRunningJob string
@@ -76,9 +81,9 @@ func main() {
     }
     defer batchQueue.Close()
 
-    deleteQueue, err = goque.OpenQueue(fmt.Sprintf("%s/delete.queue", options.MetadataDir))
+    controlQueue, err = goque.OpenQueue(fmt.Sprintf("%s/control.queue", options.MetadataDir))
     if err != nil {
-        log.Fatalf("Failed to open delete queue: %v", err)
+        log.Fatalf("Failed to open control queue: %v", err)
     }
     defer batchQueue.Close()
 
@@ -90,18 +95,19 @@ func main() {
     }
 
     go processBatchJobs()
-    go processDeleteJobs()
+    go processControlJobs()
 
     log.Infof("Zahif Server listening on %s:%d", options.Listen, options.Port)
     var opts []grpc.ServerOption
     grpcServer := grpc.NewServer(opts...)
-    zahif = zahifServer{BatchQueue: batchQueue, DeleteQueue: deleteQueue}
+    zahif = zahifServer{BatchQueue: batchQueue, ControlQueue: controlQueue}
     pb.RegisterZahifServer(grpcServer, &zahif)
     grpcServer.Serve(lis)
 
 }
 
 func (z *zahifServer) BatchIndex(ctx context.Context, req *pb.BatchIndexRequest) (*pb.BatchIndexResponse, error) {
+    log.Debugf("Recevied BatchIndex Request: %v", req)
     _, err := z.BatchQueue.EnqueueObject(req)
     if err != nil {
         return nil, fmt.Errorf("Failed to queue batch index job: %v", err)
@@ -122,18 +128,29 @@ func (z *zahifServer) IndexProgress(ctx context.Context, req *pb.IndexProgressRe
         log.Errorf("Error while checking on index %s progess: %v", req.IndexIdentifier, err)
         return nil, err
     }
-    log.Debugf("Progress of index %s is at %f", req.IndexIdentifier, percentage)
+    log.Debugf("Progress of index %s is at %f (is_running=%v)", req.IndexIdentifier, percentage, currentRunningJob == req.IndexIdentifier)
 
-    return &pb.IndexProgressResponse{PercentageDone: float32(percentage), IndexedDocuments: indexed, TotalDoucments: total}, nil
+    return &pb.IndexProgressResponse{PercentageDone: float32(percentage),
+        IndexedDocuments: int32(indexed),
+        TotalDocuments:   int32(total),
+        IsRunning:        currentRunningJob == req.IndexIdentifier,
+    }, nil
 }
 
 func (z *zahifServer) DeleteIndex(ctx context.Context, req *pb.DeleteIndexRequest) (*pb.DeleteIndexResponse, error) {
-    _, err := z.DeleteQueue.EnqueueObject(req)
+    _, err := z.ControlQueue.EnqueueObject(&ControlIndexOp{Type: "delete", IndexIdentifier: req.IndexIdentifier})
     if err != nil {
         return nil, fmt.Errorf("Failed to queue delete index job: %v", err)
     }
     return &pb.DeleteIndexResponse{}, nil
+}
 
+func (z *zahifServer) StopIndex(ctx context.Context, req *pb.StopIndexRequest) (*pb.StopIndexResponse, error) {
+    _, err := z.ControlQueue.EnqueueObject(&ControlIndexOp{Type: "stop", IndexIdentifier: req.IndexIdentifier})
+    if err != nil {
+        return nil, fmt.Errorf("Failed to queue stop index job: %v", err)
+    }
+    return &pb.StopIndexResponse{}, nil
 }
 
 func (z *zahifServer) SearchIndex(ctx context.Context, req *pb.SearchIndexRequest) (*pb.SearchIndexResponse, error) {
@@ -146,7 +163,7 @@ func (z *zahifServer) SearchIndex(ctx context.Context, req *pb.SearchIndexReques
     return &pb.SearchIndexResponse{Documents: results}, nil
 }
 
-func processDeleteJobs() {
+func processControlJobs() {
     ticker := time.NewTicker(1000 * time.Millisecond)
     defer ticker.Stop()
 
@@ -155,45 +172,50 @@ func processDeleteJobs() {
         case <-ticker.C:
         }
 
-        log.Trace("Polling Delete Queue")
-        item, err := deleteQueue.Peek()
+        log.Trace("Polling Control Queue")
+        item, err := controlQueue.Peek()
         if err == goque.ErrEmpty {
-            log.Trace("No jobs found in Delete Queue")
+            log.Trace("No jobs found in Control Queue")
             continue
         }
         if err != nil {
-            log.Errorf("Failed to poll Delete Queue: %v", err)
+            log.Errorf("Failed to poll Control Queue: %v", err)
             continue
         }
 
-        var req pb.DeleteIndexRequest
+        var req ControlIndexOp
         err = item.ToObject(&req)
 
-        log.Debugf("Processing delete job for index '%s'", req.IndexIdentifier)
-        // Fulfill indexing request
-        indexer := indexer.BatchIndexer{
-            MetadataDir:     options.MetadataDir,
-            IndexIdentifier: req.IndexIdentifier,
-            Parallelism:     options.Parallelism,
-        }
+        switch req.Type {
+        case "delete":
+            log.Infof("Processing delete job for index '%s'", req.IndexIdentifier)
+            // Fulfill indexing request
+            indexer := indexer.BatchIndexer{
+                MetadataDir:     options.MetadataDir,
+                IndexIdentifier: req.IndexIdentifier,
+                Parallelism:     options.Parallelism,
+            }
 
-        interruptChannel <- req.IndexIdentifier
+            interruptChannel <- req.IndexIdentifier
 
-        // Delete index (metadata and storage)
-        err = indexer.DeleteIndex()
+            // Delete index (metadata and storage)
+            err = indexer.DeleteIndex()
 
-        if err != nil {
-            log.Errorf("Error while deleting index %s: %v", req.IndexIdentifier, err)
-            continue
+            if err != nil {
+                log.Errorf("Error while deleting index %s: %v", req.IndexIdentifier, err)
+                continue
+            }
+            log.Infof("Index '%s' has been deleted successfully", req.IndexIdentifier)
+        case "stop":
+            log.Infof("Processing stop request for index  '%s'", req.IndexIdentifier)
+            interruptChannel <- req.IndexIdentifier
         }
 
         // On completion, remove from queue
-        _, err = deleteQueue.Dequeue()
+        _, err = controlQueue.Dequeue()
         if err != nil {
             log.Errorf("Failed to dequeue job from queue: %v", err)
         }
-
-        log.Infof("Index '%s' has been deleted successfully", req.IndexIdentifier)
 
     }
 }
@@ -245,6 +267,7 @@ func processBatchJobs() {
             log.Errorf("Failed while indexing %s: %v", indexRequest.IndexIdentifier, err)
             continue
         }
+        currentRunningJob = ""
 
         log.Infof("Indexing '%s' has completed successfully", indexRequest.IndexIdentifier)
 

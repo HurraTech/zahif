@@ -8,6 +8,7 @@ service Zahif {
     rpc BatchIndex(BatchIndexRequest) returns (BatchIndexResponse) {}
     rpc IndexProgress(IndexProgressRequest) returns (IndexProgressResponse) {}
     rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse) {}  // can also be used for canceling on-going index request as well
+    rpc StopIndex(StopIndexRequest) returns (StopIndexResponse) {}
     rpc SearchIndex(SearchIndexRequest) returns (SearchIndexResponse) {}
 }
 
@@ -28,6 +29,7 @@ message IndexProgressResponse {
     float percentage_done = 1;
     int32 indexed_documents = 2;
     int32 total_documents = 3;
+    bool is_running = 4;
 }
 
 
@@ -47,5 +49,13 @@ message DeleteIndexRequest {
 }
 
 message DeleteIndexResponse {
+}
+
+
+message StopIndexRequest {
+    string index_identifier = 1;
+}
+
+message StopIndexResponse {
     int32 percentage_done = 1;
 }
