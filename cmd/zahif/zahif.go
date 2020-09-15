@@ -159,7 +159,11 @@ func (z *zahifServer) SearchIndex(ctx context.Context, req *pb.SearchIndexReques
     if err != nil {
         return nil, fmt.Errorf("Error while fulfilling search request: %s", err)
     }
-    log.Debugf("Search Results: %v", results)
+    if len(results) == 1 && results[0] == "" {
+        results = []string{} // removing sonic empty result element
+    }
+    log.Debugf("Search Results (%d): %v", len(results), results)
+
     return &pb.SearchIndexResponse{Documents: results}, nil
 }
 
