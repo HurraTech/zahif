@@ -9,7 +9,9 @@ require (
 	github.com/golang/protobuf v1.3.3
 	github.com/h2non/filetype v1.1.0 // indirect
 	github.com/jessevdk/go-flags v1.4.0
+	github.com/onsi/ginkgo v1.7.0
 	github.com/sirupsen/logrus v1.6.0
 	github.com/syndtr/goleveldb v1.0.0 // indirect
+	google.golang.org/appengine v1.4.0
 	google.golang.org/grpc v1.32.0
 )

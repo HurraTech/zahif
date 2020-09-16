@@ -3,9 +3,6 @@ package indexer
 import (
 	"bufio"
 	"fmt"
-	"github.com/beeker1121/goque"
-	"github.com/expectedsh/go-sonic/sonic"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"io/ioutil"
 	"math"
@@ -17,7 +14,11 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/beeker1121/goque"
+	log "github.com/sirupsen/logrus"
+
 	"hurracloud.io/zahif/internal/indexer/utils"
+	"hurracloud.io/zahif/internal/search/backend"
 )
 
 type BatchIndexer struct {
@@ -26,7 +27,7 @@ type BatchIndexer struct {
 	MetadataDir             string
 	Parallelism             int
 	ExcludePatterns         []string
-	Ingester                sonic.Ingestable
+	Backend                 backend.SearchBackend
 	RetriesQueue            *goque.Queue
 	InterruptChannel        <-chan string
 	planCurrentPositionByte int64
@@ -84,6 +85,11 @@ func (z *BatchIndexer) DeleteIndex() error {
 	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexIdentifier)
 	os.Remove(z.indexPlanFile)
 	os.Remove(z.indexProgressFile)
+
+	if err := z.Backend.DeleteIndex(z.IndexIdentifier); err != nil {
+		return fmt.Errorf("Failed to flush collection on sonic: %v", err)
+	}
+
 	return nil
 }
 
@@ -233,7 +239,7 @@ OUTER:
 }
 
 func (z *BatchIndexer) indexFiles(paths []string) {
-	var records []sonic.IngestBulkRecord
+	var records []backend.Document
 	for _, path := range paths {
 		if utils.IsIndexable(path) {
 			log.Debugf("Will index %s", path)
@@ -242,7 +248,7 @@ func (z *BatchIndexer) indexFiles(paths []string) {
 				log.Debugf("Failed to read %s. Skipping it", path)
 				continue
 			}
-			record := sonic.IngestBulkRecord{fmt.Sprintf("id:%s", path), string(content)}
+			record := backend.Document{ID: path, Content: string(content)}
 			records = append(records, record)
 		} else {
 			log.Debugf("Will not index %s (binary file)", path)
@@ -250,7 +256,7 @@ func (z *BatchIndexer) indexFiles(paths []string) {
 	}
 
 	log.Infof("Starting Bulk Indexing of %d files (index=%s)", len(records), z.IndexIdentifier)
-	_ = z.Ingester.BulkPush("Files", z.IndexIdentifier, z.Parallelism, records)
+	_ = z.Backend.IndexFiles(z.IndexIdentifier, records)
 }
 
 func (z *BatchIndexer) saveProgress(posBytes int64, posLines int, totalLines int) error {
