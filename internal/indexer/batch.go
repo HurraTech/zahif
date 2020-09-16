@@ -22,11 +22,8 @@ import (
 )
 
 type BatchIndexer struct {
-	IndexIdentifier         string
-	Target                  string
+	IndexSettings           *IndexSettings
 	MetadataDir             string
-	Parallelism             int
-	ExcludePatterns         []string
 	Backend                 backend.SearchBackend
 	RetriesQueue            *goque.Queue
 	InterruptChannel        <-chan string
@@ -38,8 +35,8 @@ type BatchIndexer struct {
 }
 
 func (z *BatchIndexer) Index() error {
-	z.indexPlanFile = fmt.Sprintf("%s/%s.plan", z.MetadataDir, z.IndexIdentifier)
-	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexIdentifier)
+	z.indexPlanFile = fmt.Sprintf("%s/%s.plan", z.MetadataDir, z.IndexSettings.IndexIdentifier)
+	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexSettings.IndexIdentifier)
 
 	_, err := os.Stat(z.indexPlanFile)
 	totalDocs := -1
@@ -51,17 +48,17 @@ func (z *BatchIndexer) Index() error {
 	}
 
 	if err = z.executeIndexPlan(totalDocs); err != nil {
-		return fmt.Errorf("Failed while indexing %s: %v", z.IndexIdentifier, err)
+		return fmt.Errorf("Failed while indexing %s: %v", z.IndexSettings.IndexIdentifier, err)
 	}
 
 	return nil
 }
 
 func (z *BatchIndexer) CheckProgress() (int, int, float64, error) {
-	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexIdentifier)
+	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexSettings.IndexIdentifier)
 
 	if _, err := os.Stat(z.indexProgressFile); os.IsNotExist(err) {
-		log.Tracef("Could not find progress file for index %s. Assuming progress is 0", z.IndexIdentifier)
+		log.Tracef("Could not find progress file for index %s. Assuming progress is 0", z.IndexSettings.IndexIdentifier)
 		return 0, 0, 0, nil
 	}
 
@@ -81,12 +78,12 @@ func (z *BatchIndexer) CheckProgress() (int, int, float64, error) {
 }
 
 func (z *BatchIndexer) DeleteIndex() error {
-	z.indexPlanFile = fmt.Sprintf("%s/%s.plan", z.MetadataDir, z.IndexIdentifier)
-	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexIdentifier)
+	z.indexPlanFile = fmt.Sprintf("%s/%s.plan", z.MetadataDir, z.IndexSettings.IndexIdentifier)
+	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexSettings.IndexIdentifier)
 	os.Remove(z.indexPlanFile)
 	os.Remove(z.indexProgressFile)
 
-	if err := z.Backend.DeleteIndex(z.IndexIdentifier); err != nil {
+	if err := z.Backend.DeleteIndex(z.IndexSettings.IndexIdentifier); err != nil {
 		return fmt.Errorf("Failed to flush collection on sonic: %v", err)
 	}
 
@@ -94,7 +91,7 @@ func (z *BatchIndexer) DeleteIndex() error {
 }
 
 func (z *BatchIndexer) buildIndexPlan() (int, error) {
-	log.Infof("Build index plan of index %s", z.IndexIdentifier)
+	log.Infof("Build index plan of index %s", z.IndexSettings.IndexIdentifier)
 
 	f, err := os.OpenFile(z.indexPlanFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -104,7 +101,7 @@ func (z *BatchIndexer) buildIndexPlan() (int, error) {
 
 	// Compile exclude patterns
 	var compiledPatterns []*regexp.Regexp
-	for _, pattern := range z.ExcludePatterns {
+	for _, pattern := range z.IndexSettings.ExcludePatterns {
 		re, err := regexp.Compile(pattern)
 		if err == nil {
 			compiledPatterns = append(compiledPatterns, re)
@@ -120,7 +117,7 @@ func (z *BatchIndexer) buildIndexPlan() (int, error) {
 	}
 
 	totalDocs := 0
-	err = filepath.Walk(z.Target, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(z.IndexSettings.Target, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			log.Warningf("Could not walk target path: %s", err)
 			return nil
@@ -147,7 +144,7 @@ func (z *BatchIndexer) buildIndexPlan() (int, error) {
 }
 
 func (z *BatchIndexer) executeIndexPlan(totalDocs int) error {
-	log.Infof("Start/Resume indexing of index %s", z.IndexIdentifier)
+	log.Infof("Start/Resume indexing of index %s", z.IndexSettings.IndexIdentifier)
 
 	pf, perr := os.Open(z.indexProgressFile)
 	f, err := os.Open(z.indexPlanFile)
@@ -204,8 +201,8 @@ OUTER:
 	for {
 		select {
 		case indexID := <-z.InterruptChannel:
-			if indexID == z.IndexIdentifier {
-				log.Warningf("Indexing of %s interrupted", z.IndexIdentifier)
+			if indexID == z.IndexSettings.IndexIdentifier {
+				log.Warningf("Indexing of %s interrupted", z.IndexSettings.IndexIdentifier)
 				z.saveProgress(pos, posLine, totalDocs)
 				return nil
 			} else {
@@ -220,9 +217,9 @@ OUTER:
 				}
 
 				bulk = append(bulk, path)
-				if len(bulk) >= z.Parallelism {
+				if len(bulk) >= z.IndexSettings.Parallelism {
 					z.indexFiles(bulk)
-					log.Debugf("Indexed %d out of %d documents (index=%s, progress=%f)", posLine, totalDocs, z.IndexIdentifier, math.Ceil(float64(posLine)/float64(totalDocs)*100))
+					log.Debugf("Indexed %d out of %d documents (index=%s, progress=%f)", posLine, totalDocs, z.IndexSettings.IndexIdentifier, math.Ceil(float64(posLine)/float64(totalDocs)*100))
 					bulk = nil
 					z.saveProgress(pos, posLine, totalDocs)
 					continue OUTER
@@ -255,8 +252,8 @@ func (z *BatchIndexer) indexFiles(paths []string) {
 		}
 	}
 
-	log.Infof("Starting Bulk Indexing of %d files (index=%s)", len(records), z.IndexIdentifier)
-	_ = z.Backend.IndexFiles(z.IndexIdentifier, records)
+	log.Infof("Starting Bulk Indexing of %d files (index=%s)", len(records), z.IndexSettings.IndexIdentifier)
+	_ = z.Backend.IndexFiles(z.IndexSettings.IndexIdentifier, records)
 }
 
 func (z *BatchIndexer) saveProgress(posBytes int64, posLines int, totalLines int) error {

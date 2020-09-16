@@ -39,7 +39,7 @@ func main() {
 		log.Fatalf("Error connecting to search backend: %s", err)
 	}
 
-	zahif, err := zahif.NewZahif(searchBackend, options.Listen, options.Port, options.MetadataDir)
+	zahif, err := zahif.NewZahif(searchBackend, options.Listen, options.Port, options.MetadataDir, options.Parallelism)
 	if err != nil {
 		log.Fatalf("Failed creating zahif server: %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 
+	"hurracloud.io/zahif/internal/indexer"
 	"hurracloud.io/zahif/internal/search/backend"
 	pb "hurracloud.io/zahif/internal/zahif/proto"
 )
@@ -26,6 +27,7 @@ type ZahifServer struct {
 	store             *store
 	listen            string
 	port              int
+	parallelism       int
 }
 
 type controlIndexOp struct {
@@ -33,7 +35,7 @@ type controlIndexOp struct {
 	IndexIdentifier string
 }
 
-func NewZahif(searchBackend backend.SearchBackend, listen string, port int, metadataDir string) (*ZahifServer, error) {
+func NewZahif(searchBackend backend.SearchBackend, listen string, port int, metadataDir string, parallelism int) (*ZahifServer, error) {
 
 	interruptChannel := make(chan string)
 
@@ -68,6 +70,7 @@ func NewZahif(searchBackend backend.SearchBackend, listen string, port int, meta
 		store:            zahifStore,
 		listen:           listen,
 		port:             port,
+		parallelism:      parallelism,
 	}, nil
 
 }
@@ -193,12 +196,12 @@ func (z *ZahifServer) processControlJobs() {
 
 			// Delete index (metadata and storage)
 			err = indexer.DeleteIndex()
-			z.store.DeleteIndexer(req.IndexIdentifier)
-
 			if err != nil {
 				log.Errorf("Error while deleting index %s: %v", req.IndexIdentifier, err)
 				continue
 			}
+			z.store.DeleteIndexer(req.IndexIdentifier)
+
 			log.Infof("Index '%s' has been deleted successfully", req.IndexIdentifier)
 		case "stop":
 			log.Infof("Processing stop request for index  '%s'", req.IndexIdentifier)
@@ -245,10 +248,11 @@ func (z *ZahifServer) processBatchJobs() {
 
 		log.Debugf("Processing batch job for index '%s'", indexRequest.IndexIdentifier)
 		// Fulfill indexing request
-		settings := &indexSettings{
+		settings := &indexer.IndexSettings{
 			Target:          indexRequest.Target,
 			IndexIdentifier: indexRequest.IndexIdentifier,
 			ExcludePatterns: indexRequest.ExcludePatterns,
+			Parallelism:     z.parallelism,
 		}
 		indexer, err := z.store.NewIndexer(settings)
 		if err != nil {

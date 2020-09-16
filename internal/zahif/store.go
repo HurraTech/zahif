@@ -8,7 +8,8 @@ import (
 	"path"
 
 	"github.com/beeker1121/goque"
-	"google.golang.org/appengine/log"
+	log "github.com/sirupsen/logrus"
+
 	"hurracloud.io/zahif/internal/indexer"
 	"hurracloud.io/zahif/internal/search/backend"
 )
@@ -24,26 +25,21 @@ type store struct {
 	RetriesQueue     *goque.Queue
 }
 
-type indexSettings struct {
-	Target          string
-	Parallelism     int
-	IndexIdentifier string
-	ExcludePatterns []string
-}
-
-func (s *store) NewIndexer(settings *indexSettings) (*indexer.BatchIndexer, error) {
+func (s *store) NewIndexer(settings *indexer.IndexSettings) (*indexer.BatchIndexer, error) {
 
 	if s.batchIndexers == nil {
 		s.batchIndexers = make(map[string]*indexer.BatchIndexer)
 	}
 
 	s.batchIndexers[settings.IndexIdentifier] = &indexer.BatchIndexer{
-		Target:           settings.Target,
+		IndexSettings: &indexer.IndexSettings{
+			Target:          settings.Target,
+			IndexIdentifier: settings.IndexIdentifier,
+			Parallelism:     settings.Parallelism,
+			ExcludePatterns: settings.ExcludePatterns,
+		},
 		MetadataDir:      s.MetadataDir,
-		IndexIdentifier:  settings.IndexIdentifier,
-		Parallelism:      settings.Parallelism,
 		Backend:          s.SearchBackend,
-		ExcludePatterns:  settings.ExcludePatterns,
 		RetriesQueue:     s.RetriesQueue,
 		InterruptChannel: s.InterruptChannel,
 	}
@@ -71,14 +67,19 @@ func (s *store) GetIndexer(indexName string) (*indexer.BatchIndexer, error) {
 		indexer.Backend = s.SearchBackend
 		indexer.InterruptChannel = s.InterruptChannel
 		indexer.RetriesQueue = s.RetriesQueue
+		indexer.MetadataDir = s.MetadataDir
 		return indexer, nil
 	}
 
 }
 
 func (s *store) saveToDisk(indexName string) (*indexer.BatchIndexer, error) {
-	file, _ := json.MarshalIndent(s.batchIndexers[indexName], "", " ")
-	err := ioutil.WriteFile(path.Join(s.MetadataDir, indexName), file, 0644)
+	log.Debugf("Serializing %v", s.batchIndexers[indexName].IndexSettings)
+	file, err := json.MarshalIndent(s.batchIndexers[indexName].IndexSettings, "", " ")
+	if err != nil {
+		return nil, fmt.Errorf("Failed to serialize indexer: %s: %v", indexName, err)
+	}
+	err = ioutil.WriteFile(path.Join(s.MetadataDir, indexName), file, 0644)
 	log.Debugf("Writing %s to disk", string(file))
 	if err != nil {
 		return nil, fmt.Errorf("Error while storing index metadata: %s: %v", indexName, err)
@@ -92,14 +93,16 @@ func (s *store) readFromDisk(indexName string) (*indexer.BatchIndexer, error) {
 	}
 
 	file, _ := ioutil.ReadFile(path.Join(s.MetadataDir, indexName))
-	indexer := &indexer.BatchIndexer{}
-	err := json.Unmarshal([]byte(file), indexer)
+	indexSettings := &indexer.IndexSettings{}
+	err := json.Unmarshal([]byte(file), indexSettings)
 
 	if err != nil {
 		return nil, fmt.Errorf("Error while reading index metadata: %s: %v", indexName, err)
 	}
 
-	s.batchIndexers[indexName] = indexer
+	s.batchIndexers[indexName] = &indexer.BatchIndexer{
+		IndexSettings: indexSettings,
+	}
 
-	return indexer, nil
+	return s.batchIndexers[indexName], nil
 }
