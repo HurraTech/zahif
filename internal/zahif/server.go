@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/beeker1121/goque"
@@ -188,6 +189,11 @@ func (z *ZahifServer) processControlJobs() {
 			// Fulfill indexing request
 			indexer, err := z.store.GetIndexer(req.IndexIdentifier)
 			if err != nil {
+				if strings.HasPrefix(err.Error(), "Index does not exist") {
+					// Index already has been deleted
+					goto DEL_DONE
+				}
+
 				log.Errorf("Could not rerieve indexer metadata: %s: %v", req.IndexIdentifier, err)
 				continue
 			}
@@ -201,7 +207,7 @@ func (z *ZahifServer) processControlJobs() {
 				continue
 			}
 			z.store.DeleteIndexer(req.IndexIdentifier)
-
+		DEL_DONE:
 			log.Infof("Index '%s' has been deleted successfully", req.IndexIdentifier)
 		case "stop":
 			log.Infof("Processing stop request for index  '%s'", req.IndexIdentifier)

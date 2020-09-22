@@ -226,6 +226,8 @@ OUTER:
 				}
 			}
 
+			z.saveProgress(pos, posLine, totalDocs)
+
 			if err := scanner.Err(); err != nil {
 				return fmt.Errorf("Error while scanning plan file: %s", err)
 			}
@@ -238,18 +240,14 @@ OUTER:
 func (z *BatchIndexer) indexFiles(paths []string) {
 	var records []backend.Document
 	for _, path := range paths {
-		if utils.IsIndexable(path) {
-			log.Debugf("Will index %s", path)
-			content, err := ioutil.ReadFile(path)
-			if err != nil {
-				log.Debugf("Failed to read %s. Skipping it", path)
-				continue
-			}
-			record := backend.Document{ID: path, Content: string(content)}
-			records = append(records, record)
-		} else {
-			log.Debugf("Will not index %s (binary file)", path)
+		log.Debugf("Will index %s", path)
+		content, err := ioutil.ReadFile(path)
+		if err != nil {
+			log.Debugf("Failed to read %s. Skipping it", path)
+			continue
 		}
+		record := backend.Document{ID: path, Content: string(content)}
+		records = append(records, record)
 	}
 
 	log.Infof("Starting Bulk Indexing of %d files (index=%s)", len(records), z.IndexSettings.IndexIdentifier)
