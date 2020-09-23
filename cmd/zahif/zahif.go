@@ -4,8 +4,8 @@ import (
 	"github.com/jessevdk/go-flags"
 	log "github.com/sirupsen/logrus"
 	"hurracloud.io/zahif/internal/backend"
+	"hurracloud.io/zahif/internal/server"
 	"hurracloud.io/zahif/internal/watcher"
-	"hurracloud.io/zahif/internal/zahif"
 )
 
 type Options struct {
@@ -40,17 +40,19 @@ func main() {
 		log.Fatalf("Error connecting to search backend: %s", err)
 	}
 
-	zahif, err := zahif.NewZahif(searchBackend, options.Listen, options.Port, options.MetadataDir, options.Parallelism)
+	s, err := server.NewZahifServer(searchBackend, options.Listen, options.Port, options.MetadataDir, options.Parallelism)
 	if err != nil {
 		log.Fatalf("Failed creating zahif server: %v", err)
 	}
 
 	watcher := &watcher.Watcher{
 		MetadataDir: options.MetadataDir,
-		IndexQueue:  zahif.IndexQueue,
+		IndexQueue:  s.IndexQueue,
 	}
+
+	s.Watcher = watcher // to stop watcher on StopWatching requests
 
 	go watcher.Watch()
 
-	zahif.Start()
+	s.Start()
 }

@@ -10,6 +10,9 @@ service Zahif {
     rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse) {}  // can also be used for canceling on-going index request as well
     rpc StopIndex(StopIndexRequest) returns (StopIndexResponse) {}
     rpc SearchIndex(SearchIndexRequest) returns (SearchIndexResponse) {}
+    rpc StopWatching(StopWatchingIndexRequest) returns (StopWatchingIndexResponse) {}
+    rpc ResumeWatching(ResumeWatchingIndexRequest) returns (ResumeWatchingIndexResponse) {}
+
 }
 
 message BatchIndexRequest {
@@ -24,6 +27,17 @@ message BatchIndexResponse {
 message IndexProgressRequest {
     string index_identifier = 1;
 }
+
+message StopWatchingIndexRequest {
+    string index_identifier = 1;
+}
+
+message ResumeWatchingIndexRequest {
+    string index_identifier = 1;
+}
+
+message StopWatchingIndexResponse { }
+message ResumeWatchingIndexResponse { }
 
 message IndexProgressResponse {
     float percentage_done = 1;

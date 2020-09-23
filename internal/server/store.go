@@ -1,4 +1,4 @@
-package zahif
+package server
 
 import (
 	"encoding/json"

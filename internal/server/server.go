@@ -1,4 +1,4 @@
-package zahif
+package server
 
 import (
 	"context"
@@ -13,13 +13,15 @@ import (
 
 	"hurracloud.io/zahif/internal/backend"
 	"hurracloud.io/zahif/internal/indexer"
-	pb "hurracloud.io/zahif/internal/zahif/proto"
+	pb "hurracloud.io/zahif/internal/server/proto"
+	"hurracloud.io/zahif/internal/watcher"
 )
 
 type ZahifServer struct {
 	pb.UnimplementedZahifServer
 
 	IndexQueue        *goque.Queue
+	Watcher           *watcher.Watcher
 	backend           backend.SearchBackend
 	batchQueue        *goque.Queue
 	controlQueue      *goque.Queue
@@ -36,7 +38,7 @@ type controlIndexOp struct {
 	IndexIdentifier string
 }
 
-func NewZahif(searchBackend backend.SearchBackend, listen string, port int, metadataDir string, parallelism int) (*ZahifServer, error) {
+func NewZahifServer(searchBackend backend.SearchBackend, listen string, port int, metadataDir string, parallelism int) (*ZahifServer, error) {
 
 	interruptChannel := make(chan string)
 
@@ -130,6 +132,26 @@ func (z *ZahifServer) IndexProgress(ctx context.Context, req *pb.IndexProgressRe
 		TotalDocuments:   int32(total),
 		IsRunning:        z.currentRunningJob == req.IndexIdentifier,
 	}, nil
+}
+
+func (z *ZahifServer) StopWatching(ctx context.Context, req *pb.StopWatchingIndexRequest) (*pb.StopWatchingIndexResponse, error) {
+	err := z.Watcher.StopWatching(req.IndexIdentifier)
+	if err != nil {
+		log.Errorf("Error while stopping watcher on index: %s: %s", req.IndexIdentifier, err)
+		return nil, err
+	}
+
+	return &pb.StopWatchingIndexResponse{}, nil
+}
+
+func (z *ZahifServer) ResumeWatching(ctx context.Context, req *pb.ResumeWatchingIndexRequest) (*pb.ResumeWatchingIndexResponse, error) {
+	err := z.Watcher.ResumeWatching(req.IndexIdentifier)
+	if err != nil {
+		log.Errorf("Error while stopping watcher on index: %s: %s", req.IndexIdentifier, err)
+		return nil, err
+	}
+
+	return &pb.ResumeWatchingIndexResponse{}, nil
 }
 
 func (z *ZahifServer) DeleteIndex(ctx context.Context, req *pb.DeleteIndexRequest) (*pb.DeleteIndexResponse, error) {

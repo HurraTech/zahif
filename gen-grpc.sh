@@ -1,2 +1,2 @@
 #!/bin/bash
-protoc -I . zahif.proto --go_out=plugins=grpc:./internal/zahif/proto
+protoc -I . zahif.proto --go_out=plugins=grpc:./internal/server/proto
