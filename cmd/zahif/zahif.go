@@ -14,7 +14,7 @@ type Options struct {
 	SonicHost     string `short:"h" long:"sonic_host" env:"SONIC_HOST" description:"Sonic server host" default:"127.0.0.1"`
 	SonicPort     int    `short:"P" long:"sonic_port" env:"SONIC_PORT" description:"Sonic server port" default:"1491"`
 	SonicPassword string `short:"s" long:"sonic_pssword" env:"SONIC_PASSWORD" description:"Sonic server password" default:"SecretPassword"`
-	Verbose       bool   `short:"v" long:"verbose" description:"Enable verbose logging"`
+	Verbose       []bool `short:"v" long:"verbose" description:"Enable verbose logging"`
 	Mode          string `short:"m" long:"mode" env:"MODE" description:"Zahif mode ('batch' or 'single')" default:"batch" choice:"batch" choice:"single"`
 	Listen        string `short:"L" long:"listen" env:"LISTEN" description:"Address to bind server to" default:"127.0.0.1"`
 	Port          int    `short:"o" long:"port" env:"PORT" description:"Port to bind server to" default:"10001"`
@@ -31,8 +31,10 @@ func main() {
 		panic(err)
 	}
 
-	if options.Verbose {
+	if len(options.Verbose) == 1 {
 		log.SetLevel(log.DebugLevel)
+	} else if len(options.Verbose) == 2 {
+		log.SetLevel(log.TraceLevel)
 	}
 
 	searchBackend, err = backend.NewSonicBackend(options.SonicHost, options.SonicPort, options.SonicPassword, options.Parallelism)

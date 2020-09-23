@@ -60,6 +60,19 @@ func (s *Sonic) IndexFiles(indexName string, docs []Document) error {
 	return nil
 }
 
+func (s *Sonic) IndexFile(indexName string, d Document) error {
+	err := s.ingester.FlushObject(indexName, "generic", d.ID)
+	if err != nil {
+		return fmt.Errorf("Sonic error while indexing document: %v", err)
+	}
+
+	err = s.ingester.Push(indexName, "generic", d.ID, d.Content)
+	if err != nil {
+		return fmt.Errorf("Sonic error while indexing document: %v", err)
+	}
+	return nil
+}
+
 func (s *Sonic) DeleteIndex(indexName string) error {
 	err := s.ingester.FlushCollection(indexName)
 	if isClosed(err) {

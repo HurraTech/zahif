@@ -12,7 +12,6 @@ import (
 	"github.com/beeker1121/goque"
 	"github.com/radovskyb/watcher"
 	log "github.com/sirupsen/logrus"
-	"hurracloud.io/zahif/internal/indexer"
 )
 
 type Watcher struct {
@@ -20,6 +19,11 @@ type Watcher struct {
 	IndexQueue  *goque.Queue
 	rootDirMap  map[string]string
 	w           *watcher.Watcher
+}
+
+type FileIndexRequest struct {
+	FilePath        string
+	IndexIdentifier string
 }
 
 func (w *Watcher) Watch() error {
@@ -69,8 +73,9 @@ func (w *Watcher) Watch() error {
 					log.Errorf("Error handling changed file: %s", err)
 					continue
 				}
-				log.Tracef("Enqueue index request for changed file %s in index %s", event.Name, indexName)
-				w.IndexQueue.EnqueueObject(&indexer.FileIndexRequest{IndexIdentifier: indexName})
+				log.Debugf("Enqueue index request for changed file %s in index %s", event.Name(), indexName)
+				req := FileIndexRequest{IndexIdentifier: indexName, FilePath: event.Path}
+				w.IndexQueue.EnqueueObject(&req)
 			case err := <-w.w.Error:
 				log.Errorf("Watcher Error: %s", err)
 			case <-w.w.Closed:

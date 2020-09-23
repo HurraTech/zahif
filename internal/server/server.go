@@ -42,7 +42,7 @@ func NewZahifServer(searchBackend backend.SearchBackend, listen string, port int
 
 	interruptChannel := make(chan string)
 
-	IndexQueue, err := goque.OpenQueue(fmt.Sprintf("%s/single.queue", metadataDir))
+	indexQueue, err := goque.OpenQueue(fmt.Sprintf("%s/single.queue", metadataDir))
 	if err != nil {
 		return nil, fmt.Errorf("Failed to open single queue: %v", err)
 	}
@@ -62,10 +62,11 @@ func NewZahifServer(searchBackend backend.SearchBackend, listen string, port int
 		MetadataDir:      metadataDir,
 		SearchBackend:    searchBackend,
 		InterruptChannel: interruptChannel,
-		RetriesQueue:     IndexQueue,
+		RetriesQueue:     indexQueue,
 	}
 
 	return &ZahifServer{
+		IndexQueue:       indexQueue,
 		batchQueue:       batchQueue,
 		controlQueue:     controlQueue,
 		interruptChannel: interruptChannel,
@@ -95,6 +96,7 @@ func (z *ZahifServer) Start() error {
 
 	go z.processBatchJobs()
 	go z.processControlJobs()
+	go z.processFileJobs()
 
 	log.Infof("Zahif Server listening on %s:%d", z.listen, z.port)
 	if err = grpcServer.Serve(lis); err != nil {
@@ -114,7 +116,7 @@ func (z *ZahifServer) BatchIndex(ctx context.Context, req *pb.BatchIndexRequest)
 }
 
 func (z *ZahifServer) IndexProgress(ctx context.Context, req *pb.IndexProgressRequest) (*pb.IndexProgressResponse, error) {
-	indexer, err := z.store.GetIndexer(req.IndexIdentifier)
+	indexer, err := z.store.GetBatchIndexer(req.IndexIdentifier)
 	if err != nil {
 		return nil, fmt.Errorf("%v", err)
 	}
@@ -209,7 +211,7 @@ func (z *ZahifServer) processControlJobs() {
 		case "delete":
 			log.Infof("Processing delete job for index '%s'", req.IndexIdentifier)
 			// Fulfill indexing request
-			indexer, err := z.store.GetIndexer(req.IndexIdentifier)
+			indexer, err := z.store.GetBatchIndexer(req.IndexIdentifier)
 			if err != nil {
 				if strings.HasPrefix(err.Error(), "Index does not exist") {
 					// Index already has been deleted
@@ -282,7 +284,7 @@ func (z *ZahifServer) processBatchJobs() {
 			ExcludePatterns: indexRequest.ExcludePatterns,
 			Parallelism:     z.parallelism,
 		}
-		indexer, err := z.store.NewIndexer(settings)
+		indexer, err := z.store.NewBatchIndexer(settings)
 		if err != nil {
 			log.Errorf("Error creating index metadata :%s: %v", indexRequest.IndexIdentifier, err)
 			continue
@@ -300,6 +302,48 @@ func (z *ZahifServer) processBatchJobs() {
 
 		// On completion, remove from queue
 		_, err = z.batchQueue.Dequeue()
+		if err != nil {
+			log.Errorf("Failed to dequeue job from queue: %v", err)
+		}
+	}
+}
+
+func (z *ZahifServer) processFileJobs() {
+
+	ticker := time.NewTicker(1000 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+		}
+
+		log.Trace("Polling Index Queue")
+		item, err := z.IndexQueue.Peek()
+		if err == goque.ErrEmpty {
+			log.Trace("No jobs found in Index Queue")
+			continue
+		}
+
+		if err != nil {
+			log.Errorf("Failed to poll Index Queue: %v", err)
+			panic(err)
+		}
+
+		var indexRequest watcher.FileIndexRequest
+		err = item.ToObject(&indexRequest)
+
+		log.Debugf("Porcess index file request for file '%s' in index '%s'", indexRequest.FilePath, indexRequest.IndexIdentifier)
+		indexer, err := z.store.GetFileIndexer(indexRequest.IndexIdentifier)
+		if err != nil {
+			log.Errorf("Error retrieving index metadata :%s: %v", indexRequest.IndexIdentifier, err)
+			continue
+		}
+		indexer.IndexFile(indexRequest.FilePath)
+		log.Debugf("Indexing '%s' has completed successfully", indexRequest.FilePath)
+
+		// On completion, remove from queue
+		_, err = z.IndexQueue.Dequeue()
 		if err != nil {
 			log.Errorf("Failed to dequeue job from queue: %v", err)
 		}

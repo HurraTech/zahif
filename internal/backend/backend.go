@@ -1,6 +1,7 @@
 package backend
 
 type SearchBackend interface {
+	IndexFile(indexName string, docs Document) error
 	IndexFiles(indexName string, docs []Document) error
 	DeleteIndex(indexName string) error
 	SearchIndex(inexName string, query string, from int, limit int) ([]string, error)
