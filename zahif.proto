@@ -5,7 +5,7 @@ option go_package = "proto";
 package proto;
 
 service Zahif {
-    rpc BatchIndex(BatchIndexRequest) returns (BatchIndexResponse) {}
+    rpc StartOrResumeIndex(IndexRequest) returns (IndexResponse) {}
     rpc IndexProgress(IndexProgressRequest) returns (IndexProgressResponse) {}
     rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse) {}  // can also be used for canceling on-going index request as well
     rpc StopIndex(StopIndexRequest) returns (StopIndexResponse) {}
@@ -13,13 +13,13 @@ service Zahif {
 
 }
 
-message BatchIndexRequest {
+message IndexRequest {
     string target = 1;
     string index_identifier = 2;
     repeated string exclude_patterns = 3;
 }
 
-message BatchIndexResponse {
+message IndexResponse {
 }
 
 message IndexProgressRequest {

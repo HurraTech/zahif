@@ -106,13 +106,13 @@ func (z *ZahifServer) Start() error {
 	return nil
 }
 
-func (z *ZahifServer) BatchIndex(ctx context.Context, req *pb.BatchIndexRequest) (*pb.BatchIndexResponse, error) {
-	log.Debugf("Received BatchIndex Request: %v", req)
+func (z *ZahifServer) StartOrResumeIndex(ctx context.Context, req *pb.IndexRequest) (*pb.IndexResponse, error) {
+	log.Debugf("Received IndexResponse Request: %v", req)
 	_, err := z.batchQueue.EnqueueObject(req)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to queue batch index job: %v", err)
 	}
-	return &pb.BatchIndexResponse{}, nil
+	return &pb.IndexResponse{}, nil
 }
 
 func (z *ZahifServer) IndexProgress(ctx context.Context, req *pb.IndexProgressRequest) (*pb.IndexProgressResponse, error) {
@@ -152,7 +152,13 @@ func (z *ZahifServer) DeleteIndex(ctx context.Context, req *pb.DeleteIndexReques
 }
 
 func (z *ZahifServer) StopIndex(ctx context.Context, req *pb.StopIndexRequest) (*pb.StopIndexResponse, error) {
-	_, err := z.controlQueue.EnqueueObject(&controlIndexOp{Type: "stop", IndexIdentifier: req.IndexIdentifier})
+	err := z.Watcher.StopWatching(req.IndexIdentifier)
+	if err != nil {
+		log.Errorf("Error while stopping watcher on index: %s: %s", req.IndexIdentifier, err)
+		return nil, err
+	}
+
+	_, err = z.controlQueue.EnqueueObject(&controlIndexOp{Type: "stop", IndexIdentifier: req.IndexIdentifier})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to queue stop index job: %v", err)
 	}
@@ -260,37 +266,45 @@ func (z *ZahifServer) processBatchJobs() {
 			panic(err)
 		}
 
-		var indexRequest pb.BatchIndexRequest
+		var indexRequest pb.IndexRequest
 		err = item.ToObject(&indexRequest)
 
 		log.Debugf("Processing batch job for index '%s'", indexRequest.IndexIdentifier)
-		// Fulfill indexing request
-		settings := &indexer.IndexSettings{
-			Target:          indexRequest.Target,
-			IndexIdentifier: indexRequest.IndexIdentifier,
-			ExcludePatterns: indexRequest.ExcludePatterns,
-			Parallelism:     z.parallelism,
-		}
-		indexer, err := z.store.NewBatchIndexer(settings)
-		if err != nil {
-			log.Errorf("Error creating index metadata :%s: %v", indexRequest.IndexIdentifier, err)
+
+		i, err := z.store.GetBatchIndexer(indexRequest.IndexIdentifier)
+		if err != nil && err != IndexDoesNotExistError {
+			log.Errorf("Error while checking if this request is resuming existing index: %s", err)
 			continue
+		} else if err == IndexDoesNotExistError {
+			log.Debugf("This is a request for a new index: %s", indexRequest.IndexIdentifier)
+			settings := &indexer.IndexSettings{
+				Target:          indexRequest.Target,
+				IndexIdentifier: indexRequest.IndexIdentifier,
+				ExcludePatterns: indexRequest.ExcludePatterns,
+				Parallelism:     z.parallelism,
+			}
+			i, err = z.store.NewBatchIndexer(settings)
+
+			if err != nil {
+				log.Errorf("Error creating index metadata :%s: %v", indexRequest.IndexIdentifier, err)
+				continue
+			}
 		}
 
-		err = indexer.BuildIndexPlan()
+		err = i.BuildIndexPlan()
 		if err != nil {
 			log.Errorf("Error building index plan :%s: %v", indexRequest.IndexIdentifier, err)
 			continue
 		}
 
-		err = z.Watcher.StartOrResumeWatching(settings.IndexIdentifier)
+		err = z.Watcher.StartOrResumeWatching(i.IndexSettings.IndexIdentifier)
 		if err != nil {
-			log.Errorf("Error while start watcher on index: %s: %s", settings.IndexIdentifier, err)
+			log.Errorf("Error while start watcher on index: %s: %s", i.IndexSettings.IndexIdentifier, err)
 			continue
 		}
 
 		z.currentRunningJob = indexRequest.IndexIdentifier
-		err = indexer.Index()
+		err = i.Index()
 		if err != nil {
 			log.Errorf("Failed while indexing %s: %v", indexRequest.IndexIdentifier, err)
 			continue
@@ -309,7 +323,7 @@ func (z *ZahifServer) processBatchJobs() {
 
 func (z *ZahifServer) processFileJobs() {
 
-	ticker := time.NewTicker(1000 * time.Millisecond)
+	ticker := time.NewTicker(150 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
@@ -329,18 +343,24 @@ func (z *ZahifServer) processFileJobs() {
 			panic(err)
 		}
 
+		var indexer *indexer.FileIndexer
 		var indexRequest watcher.FileIndexRequest
 		err = item.ToObject(&indexRequest)
 
+		if z.store.IsStaleIndex(indexRequest.IndexIdentifier) {
+			log.Warningf("Index %s is already deleted, will not index file", indexRequest.IndexIdentifier)
+			goto DEQUEUE
+		}
+
 		log.Debugf("Porcess index file request for file '%s' in index '%s'", indexRequest.FilePath, indexRequest.IndexIdentifier)
-		indexer, err := z.store.GetFileIndexer(indexRequest.IndexIdentifier)
+		indexer, err = z.store.GetFileIndexer(indexRequest.IndexIdentifier)
 		if err != nil {
 			log.Errorf("Error retrieving index metadata :%s: %v", indexRequest.IndexIdentifier, err)
 			continue
 		}
 		indexer.IndexFile(indexRequest.FilePath)
 		log.Debugf("Indexing '%s' has completed successfully", indexRequest.FilePath)
-
+	DEQUEUE:
 		// On completion, remove from queue
 		_, err = z.IndexQueue.Dequeue()
 		if err != nil {

@@ -14,6 +14,10 @@ import (
 	"hurracloud.io/zahif/internal/indexer"
 )
 
+var (
+	IndexDoesNotExistError = fmt.Errorf("Index Does Not Exist")
+)
+
 type store struct {
 	batchIndexers map[string]*indexer.BatchIndexer
 	fileIndexers  map[string]*indexer.FileIndexer
@@ -48,17 +52,29 @@ func (s *store) NewBatchIndexer(settings *indexer.IndexSettings) (*indexer.Batch
 		return nil, fmt.Errorf("Failed to save index settings on disk: %f", err)
 	}
 
+	// If a previous index with same was deleted, a ".deleted" file might exist, let's remove it
+	// deleted files are useful to ignore stale index requests, see DeleteIndexer for details
+	os.Remove(path.Join(s.MetadataDir, fmt.Sprintf("%s.deleted", settings.IndexIdentifier)))
+
 	return s.batchIndexers[settings.IndexIdentifier], nil
 }
 
 func (s *store) DeleteIndexer(indexName string) {
 	os.Remove(path.Join(s.MetadataDir, indexName))
+
+	// Let's persist that this index has been deleted
+	// so that any queued index requests do not panic when they fail to find the index
+	f, err := os.Create(path.Join(s.MetadataDir, fmt.Sprintf("%s.deleted", indexName)))
+	if err != nil {
+		log.Errorf("Could not create deleted state file: %s", err)
+	}
+	defer f.Close()
 }
 
 func (s *store) GetBatchIndexer(indexName string) (*indexer.BatchIndexer, error) {
 	_, err := os.Stat(path.Join(s.MetadataDir, indexName))
 	if os.IsNotExist(err) {
-		return nil, fmt.Errorf("Index does not exist: %s", indexName)
+		return nil, IndexDoesNotExistError
 	}
 
 	if val, ok := s.batchIndexers[indexName]; ok {
@@ -91,6 +107,16 @@ func (s *store) GetFileIndexer(indexName string) (*indexer.FileIndexer, error) {
 		}
 		return s.fileIndexers[indexName], nil
 	}
+}
+
+func (s *store) IsStaleIndex(indexName string) bool {
+	_, err := os.Stat(path.Join(s.MetadataDir, fmt.Sprintf("%s.deleted", indexName)))
+	if os.IsNotExist(err) {
+		return false
+	} else if err != nil {
+		log.Warningf("Could not determine if index %s is stale: %s. Assume not to avoid losing data: %s", indexName, err)
+	}
+	return true
 }
 
 func (s *store) saveSettingsToDisk(settings *indexer.IndexSettings) error {
