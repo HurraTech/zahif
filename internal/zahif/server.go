@@ -11,16 +11,16 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 
+	"hurracloud.io/zahif/internal/backend"
 	"hurracloud.io/zahif/internal/indexer"
-	"hurracloud.io/zahif/internal/search/backend"
 	pb "hurracloud.io/zahif/internal/zahif/proto"
 )
 
 type ZahifServer struct {
 	pb.UnimplementedZahifServer
 
+	IndexQueue        *goque.Queue
 	backend           backend.SearchBackend
-	retriesQueue      *goque.Queue
 	batchQueue        *goque.Queue
 	controlQueue      *goque.Queue
 	interruptChannel  chan string
@@ -40,7 +40,7 @@ func NewZahif(searchBackend backend.SearchBackend, listen string, port int, meta
 
 	interruptChannel := make(chan string)
 
-	retriesQueue, err := goque.OpenQueue(fmt.Sprintf("%s/single.queue", metadataDir))
+	IndexQueue, err := goque.OpenQueue(fmt.Sprintf("%s/single.queue", metadataDir))
 	if err != nil {
 		return nil, fmt.Errorf("Failed to open single queue: %v", err)
 	}
@@ -60,7 +60,7 @@ func NewZahif(searchBackend backend.SearchBackend, listen string, port int, meta
 		MetadataDir:      metadataDir,
 		SearchBackend:    searchBackend,
 		InterruptChannel: interruptChannel,
-		RetriesQueue:     retriesQueue,
+		RetriesQueue:     IndexQueue,
 	}
 
 	return &ZahifServer{
@@ -89,7 +89,7 @@ func (z *ZahifServer) Start() error {
 
 	defer z.batchQueue.Close()
 	defer z.controlQueue.Close()
-	defer z.retriesQueue.Close()
+	defer z.IndexQueue.Close()
 
 	go z.processBatchJobs()
 	go z.processControlJobs()

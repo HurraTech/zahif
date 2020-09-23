@@ -3,7 +3,8 @@ package main
 import (
 	"github.com/jessevdk/go-flags"
 	log "github.com/sirupsen/logrus"
-	"hurracloud.io/zahif/internal/search/backend"
+	"hurracloud.io/zahif/internal/backend"
+	"hurracloud.io/zahif/internal/watcher"
 	"hurracloud.io/zahif/internal/zahif"
 )
 
@@ -43,6 +44,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed creating zahif server: %v", err)
 	}
+
+	watcher := &watcher.Watcher{
+		MetadataDir: options.MetadataDir,
+		IndexQueue:  zahif.IndexQueue,
+	}
+
+	go watcher.Watch()
 
 	zahif.Start()
 }

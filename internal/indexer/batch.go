@@ -17,8 +17,8 @@ import (
 	"github.com/beeker1121/goque"
 	log "github.com/sirupsen/logrus"
 
+	"hurracloud.io/zahif/internal/backend"
 	"hurracloud.io/zahif/internal/indexer/utils"
-	"hurracloud.io/zahif/internal/search/backend"
 )
 
 type BatchIndexer struct {
