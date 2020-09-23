@@ -32,25 +32,33 @@ type BatchIndexer struct {
 	indexPlanFile           string
 	indexProgressFile       string
 	progressFileMutex       sync.Mutex
+	totalDocs               int
 }
 
-func (z *BatchIndexer) Index() error {
+func (z *BatchIndexer) BuildIndexPlan() error {
 	z.indexPlanFile = fmt.Sprintf("%s/%s.plan", z.MetadataDir, z.IndexSettings.IndexIdentifier)
 	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexSettings.IndexIdentifier)
 
 	_, err := os.Stat(z.indexPlanFile)
-	totalDocs := -1
 	if os.IsNotExist(err) {
-		totalDocs, err = z.buildIndexPlan()
+		totalDocs, err := z.buildIndexPlan()
 		if err != nil {
 			return fmt.Errorf("Failed to build index plan file: %s", err)
 		}
+		z.totalDocs = totalDocs
+		return nil
 	}
 
-	if err = z.executeIndexPlan(totalDocs); err != nil {
+	log.Debugf("Plan for index %s was already built. Skipping plan build", z.IndexSettings.IndexIdentifier)
+	z.totalDocs = -1 // totalDocs will be determined during index process Index() from previous state file
+	return nil
+
+}
+
+func (z *BatchIndexer) Index() error {
+	if err := z.executeIndexPlan(z.totalDocs); err != nil {
 		return fmt.Errorf("Failed while indexing %s: %v", z.IndexSettings.IndexIdentifier, err)
 	}
-
 	return nil
 }
 
@@ -80,6 +88,7 @@ func (z *BatchIndexer) CheckProgress() (int, int, float64, error) {
 func (z *BatchIndexer) DeleteIndex() error {
 	z.indexPlanFile = fmt.Sprintf("%s/%s.plan", z.MetadataDir, z.IndexSettings.IndexIdentifier)
 	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexSettings.IndexIdentifier)
+
 	os.Remove(z.indexPlanFile)
 	os.Remove(z.indexProgressFile)
 

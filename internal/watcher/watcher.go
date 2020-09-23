@@ -109,11 +109,14 @@ func (w *Watcher) StopWatching(indexName string) error {
 	return w.w.RemoveRecursive(dir)
 }
 
-func (w *Watcher) ResumeWatching(indexName string) error {
+func (w *Watcher) StartOrResumeWatching(indexName string) error {
+	// Remove .paused file if exsts (relevant for ResumeWatching jobs)
 	pausedFile := path.Join(w.MetadataDir, fmt.Sprintf("%s.paused", indexName))
-	err := os.Remove(pausedFile)
-	if err != nil {
-		return fmt.Errorf("Could not remove pause file: %s", err)
+	if _, err := os.Stat(pausedFile); err == nil {
+		err = os.Remove(pausedFile)
+		if err != nil {
+			return fmt.Errorf("Could not remove pause file: %s", err)
+		}
 	}
 
 	dir, err := w.findIndexRootDir(indexName)

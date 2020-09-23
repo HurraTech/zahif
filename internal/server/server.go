@@ -136,31 +136,18 @@ func (z *ZahifServer) IndexProgress(ctx context.Context, req *pb.IndexProgressRe
 	}, nil
 }
 
-func (z *ZahifServer) StopWatching(ctx context.Context, req *pb.StopWatchingIndexRequest) (*pb.StopWatchingIndexResponse, error) {
+func (z *ZahifServer) DeleteIndex(ctx context.Context, req *pb.DeleteIndexRequest) (*pb.DeleteIndexResponse, error) {
 	err := z.Watcher.StopWatching(req.IndexIdentifier)
 	if err != nil {
 		log.Errorf("Error while stopping watcher on index: %s: %s", req.IndexIdentifier, err)
 		return nil, err
 	}
 
-	return &pb.StopWatchingIndexResponse{}, nil
-}
-
-func (z *ZahifServer) ResumeWatching(ctx context.Context, req *pb.ResumeWatchingIndexRequest) (*pb.ResumeWatchingIndexResponse, error) {
-	err := z.Watcher.ResumeWatching(req.IndexIdentifier)
-	if err != nil {
-		log.Errorf("Error while stopping watcher on index: %s: %s", req.IndexIdentifier, err)
-		return nil, err
-	}
-
-	return &pb.ResumeWatchingIndexResponse{}, nil
-}
-
-func (z *ZahifServer) DeleteIndex(ctx context.Context, req *pb.DeleteIndexRequest) (*pb.DeleteIndexResponse, error) {
-	_, err := z.controlQueue.EnqueueObject(&controlIndexOp{Type: "delete", IndexIdentifier: req.IndexIdentifier})
+	_, err = z.controlQueue.EnqueueObject(&controlIndexOp{Type: "delete", IndexIdentifier: req.IndexIdentifier})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to queue delete index job: %v", err)
 	}
+
 	return &pb.DeleteIndexResponse{}, nil
 }
 
@@ -287,6 +274,18 @@ func (z *ZahifServer) processBatchJobs() {
 		indexer, err := z.store.NewBatchIndexer(settings)
 		if err != nil {
 			log.Errorf("Error creating index metadata :%s: %v", indexRequest.IndexIdentifier, err)
+			continue
+		}
+
+		err = indexer.BuildIndexPlan()
+		if err != nil {
+			log.Errorf("Error building index plan :%s: %v", indexRequest.IndexIdentifier, err)
+			continue
+		}
+
+		err = z.Watcher.StartOrResumeWatching(settings.IndexIdentifier)
+		if err != nil {
+			log.Errorf("Error while start watcher on index: %s: %s", settings.IndexIdentifier, err)
 			continue
 		}
 
