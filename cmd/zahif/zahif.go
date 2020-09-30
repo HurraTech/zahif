@@ -11,6 +11,7 @@ import (
 type Options struct {
 	Parallelism   int    `short:"p" long:"parallelism" env:"PARALLELISM" description:"How many parallel indexing threads" default:"2"`
 	MetadataDir   string `short:"d" long:"metadta_dir" env:"METADATA_DIR" description:"Where to store metadta about indices" default:"."`
+	Backend       string `short:"b" long:"backend" env:"BACKEND" description:"Which backend to use, sonic or bleve" default:"bleve"`
 	SonicHost     string `short:"h" long:"sonic_host" env:"SONIC_HOST" description:"Sonic server host" default:"127.0.0.1"`
 	SonicPort     int    `short:"P" long:"sonic_port" env:"SONIC_PORT" description:"Sonic server port" default:"1491"`
 	SonicPassword string `short:"s" long:"sonic_pssword" env:"SONIC_PASSWORD" description:"Sonic server password" default:"SecretPassword"`
@@ -37,7 +38,14 @@ func main() {
 		log.SetLevel(log.TraceLevel)
 	}
 
-	searchBackend, err = backend.NewSonicBackend(options.SonicHost, options.SonicPort, options.SonicPassword, options.Parallelism)
+	if options.Backend == "sonic" {
+		searchBackend, err = backend.NewSonicBackend(options.SonicHost, options.SonicPort, options.SonicPassword, options.Parallelism)
+	} else if options.Backend == "bleve" {
+		searchBackend, err = backend.NewBleveBackend(options.MetadataDir)
+	} else {
+		log.Fatalf("Invalid backend '%s', currently supported backends are: sonic, bleve", options.Backend)
+	}
+
 	if err != nil {
 		log.Fatalf("Error connecting to search backend: %s", err)
 	}

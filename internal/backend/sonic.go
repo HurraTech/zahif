@@ -75,7 +75,7 @@ func (s *Sonic) IndexFile(indexName string, d Document) error {
 
 func (s *Sonic) DeleteIndex(indexName string) error {
 	err := s.ingester.FlushCollection(indexName)
-	if isClosed(err) {
+	if isSonicClosed(err) {
 		err = s.reconnect()
 	}
 
@@ -87,7 +87,7 @@ func (s *Sonic) DeleteIndex(indexName string) error {
 
 func (s *Sonic) SearchIndex(indexName string, query string, from int, limit int) ([]string, error) {
 	results, err := s.search.Query(indexName, "generic", query, limit, from)
-	if isClosed(err) {
+	if isSonicClosed(err) {
 		s.reconnect()
 		results, err = s.search.Query(indexName, "generic", query, limit, from)
 	}
@@ -101,6 +101,6 @@ func (s *Sonic) SearchIndex(indexName string, query string, from int, limit int)
 	return results, nil
 }
 
-func isClosed(err error) bool {
+func isSonicClosed(err error) bool {
 	return err != nil && (err == sonic.ErrClosed || strings.Contains(err.Error(), "EOF"))
 }
