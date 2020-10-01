@@ -50,6 +50,7 @@ Thumbs.db
 
 # Zahif files
 partition-*
+internal-*
 *.plan
 *.progress
 *.queue
