@@ -227,7 +227,7 @@ OUTER:
 				}
 
 				bulk = append(bulk, path)
-				if len(bulk) >= z.IndexSettings.Parallelism {
+				if len(bulk) >= z.IndexSettings.Parallelism || posLine == totalDocs {
 					z.indexFiles(bulk)
 					log.Debugf("Indexed %d out of %d documents (index=%s, progress=%f)", posLine, totalDocs, z.IndexSettings.IndexIdentifier, math.Ceil(float64(posLine)/float64(totalDocs)*100))
 					bulk = nil

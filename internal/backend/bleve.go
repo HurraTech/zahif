@@ -38,6 +38,7 @@ func (b *Bleve) IndexFiles(indexName string, docs []Document) error {
 	batch := index.NewBatch()
 	for _, d := range docs {
 		log.Debugf("Adding doc %s to batch", d.ID)
+		batch.Delete(d.ID)
 		batch.Index(d.ID, d.Content)
 	}
 
@@ -54,6 +55,7 @@ func (b *Bleve) IndexFile(indexName string, d Document) error {
 	if err != nil {
 		return err
 	}
+	index.Delete(d.ID)
 	return index.Index(d.ID, d.Content)
 }
 

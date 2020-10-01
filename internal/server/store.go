@@ -54,7 +54,7 @@ func (s *store) NewBatchIndexer(settings *indexer.IndexSettings) (*indexer.Batch
 
 	// If a previous index with same was deleted, a ".deleted" file might exist, let's remove it
 	// deleted files are useful to ignore stale index requests, see DeleteIndexer for details
-	os.Remove(path.Join(s.MetadataDir, settings.IndexIdentifier, "stale"))
+	os.Remove(path.Join(s.MetadataDir, fmt.Sprintf("%s.deleted", settings.IndexIdentifier)))
 
 	return s.batchIndexers[settings.IndexIdentifier], nil
 }
@@ -64,7 +64,7 @@ func (s *store) DeleteIndexer(indexName string) {
 
 	// Let's persist that this index has been deleted
 	// so that any queued index requests do not panic when they fail to find the index
-	f, err := os.Create(path.Join(s.MetadataDir, indexName, "stale"))
+	f, err := os.Create(path.Join(s.MetadataDir, fmt.Sprintf("%s.deleted", indexName)))
 	if err != nil {
 		log.Errorf("Could not create deleted state file: %s", err)
 	}
@@ -110,7 +110,7 @@ func (s *store) GetFileIndexer(indexName string) (*indexer.FileIndexer, error) {
 }
 
 func (s *store) IsStaleIndex(indexName string) bool {
-	_, err := os.Stat(path.Join(s.MetadataDir, indexName, "stale"))
+	_, err := os.Stat(path.Join(s.MetadataDir, fmt.Sprintf("%s.deleted", indexName)))
 	if os.IsNotExist(err) {
 		return false
 	} else if err != nil {
