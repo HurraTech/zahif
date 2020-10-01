@@ -54,17 +54,17 @@ func (s *store) NewBatchIndexer(settings *indexer.IndexSettings) (*indexer.Batch
 
 	// If a previous index with same was deleted, a ".deleted" file might exist, let's remove it
 	// deleted files are useful to ignore stale index requests, see DeleteIndexer for details
-	os.Remove(path.Join(s.MetadataDir, fmt.Sprintf("%s.deleted", settings.IndexIdentifier)))
+	os.Remove(path.Join(s.MetadataDir, settings.IndexIdentifier, "stale"))
 
 	return s.batchIndexers[settings.IndexIdentifier], nil
 }
 
 func (s *store) DeleteIndexer(indexName string) {
-	os.Remove(path.Join(s.MetadataDir, indexName))
+	os.RemoveAll(path.Join(s.MetadataDir, indexName))
 
 	// Let's persist that this index has been deleted
 	// so that any queued index requests do not panic when they fail to find the index
-	f, err := os.Create(path.Join(s.MetadataDir, fmt.Sprintf("%s.deleted", indexName)))
+	f, err := os.Create(path.Join(s.MetadataDir, indexName, "stale"))
 	if err != nil {
 		log.Errorf("Could not create deleted state file: %s", err)
 	}
@@ -72,7 +72,7 @@ func (s *store) DeleteIndexer(indexName string) {
 }
 
 func (s *store) GetBatchIndexer(indexName string) (*indexer.BatchIndexer, error) {
-	_, err := os.Stat(path.Join(s.MetadataDir, indexName))
+	_, err := os.Stat(path.Join(s.MetadataDir, indexName, "settings.json"))
 	if os.IsNotExist(err) {
 		return nil, IndexDoesNotExistError
 	}
@@ -110,7 +110,7 @@ func (s *store) GetFileIndexer(indexName string) (*indexer.FileIndexer, error) {
 }
 
 func (s *store) IsStaleIndex(indexName string) bool {
-	_, err := os.Stat(path.Join(s.MetadataDir, fmt.Sprintf("%s.deleted", indexName)))
+	_, err := os.Stat(path.Join(s.MetadataDir, indexName, "stale"))
 	if os.IsNotExist(err) {
 		return false
 	} else if err != nil {
@@ -125,7 +125,12 @@ func (s *store) saveSettingsToDisk(settings *indexer.IndexSettings) error {
 	if err != nil {
 		return fmt.Errorf("Failed to serialize indexer: %s: %v", settings.IndexIdentifier, err)
 	}
-	err = ioutil.WriteFile(path.Join(s.MetadataDir, settings.IndexIdentifier), file, 0644)
+	err = os.MkdirAll(path.Join(s.MetadataDir, settings.IndexIdentifier), 0755)
+	if err != nil {
+		return fmt.Errorf("Error creating index metadata directory: %s: %v", settings.IndexIdentifier, err)
+	}
+
+	err = ioutil.WriteFile(path.Join(s.MetadataDir, settings.IndexIdentifier, "settings.json"), file, 0644)
 	log.Debugf("Writing %s to disk", string(file))
 	if err != nil {
 		return fmt.Errorf("Error while storing index metadata: %s: %v", settings.IndexIdentifier, err)
@@ -134,7 +139,7 @@ func (s *store) saveSettingsToDisk(settings *indexer.IndexSettings) error {
 }
 
 func (s *store) readSettingsFromDisk(indexName string) (*indexer.IndexSettings, error) {
-	file, _ := ioutil.ReadFile(path.Join(s.MetadataDir, indexName))
+	file, _ := ioutil.ReadFile(path.Join(s.MetadataDir, indexName, "settings.json"))
 	indexSettings := &indexer.IndexSettings{}
 	err := json.Unmarshal([]byte(file), indexSettings)
 

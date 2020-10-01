@@ -31,9 +31,9 @@ func (w *Watcher) Watch() error {
 	w.w = _w
 	w.rootDirMap = map[string]string{}
 
-	if plans, err := filepath.Glob(path.Join(w.MetadataDir, "*.plan")); err == nil {
-		for _, planFile := range plans {
-			indexName := strings.Split(planFile, ".")[0]
+	if plans, err := filepath.Glob(path.Join(w.MetadataDir, "**", "settings.json")); err == nil {
+		for _, settingsFile := range plans {
+			indexName := path.Dir(settingsFile)
 			paused, err := w.isPaused(indexName)
 			if err != nil {
 				log.Warnf("Could not determine if watching %s is paused, will assume not to avoid missing new data: %s", indexName, err)
@@ -92,7 +92,7 @@ func (w *Watcher) Watch() error {
 }
 
 func (w *Watcher) StopWatching(indexName string) error {
-	pausedFile := path.Join(w.MetadataDir, fmt.Sprintf("%s.paused", indexName))
+	pausedFile := path.Join(w.MetadataDir, indexName, "paused")
 	f, err := os.Create(pausedFile)
 	if err != nil {
 		return fmt.Errorf("Could not create pause file: %s", err)
@@ -111,7 +111,7 @@ func (w *Watcher) StopWatching(indexName string) error {
 
 func (w *Watcher) StartOrResumeWatching(indexName string) error {
 	// Remove .paused file if exsts (relevant for ResumeWatching jobs)
-	pausedFile := path.Join(w.MetadataDir, fmt.Sprintf("%s.paused", indexName))
+	pausedFile := path.Join(w.MetadataDir, indexName, "paused")
 	if _, err := os.Stat(pausedFile); err == nil {
 		err = os.Remove(pausedFile)
 		if err != nil {
@@ -130,7 +130,7 @@ func (w *Watcher) StartOrResumeWatching(indexName string) error {
 }
 
 func (w *Watcher) findIndexRootDir(indexName string) (string, error) {
-	f, err := os.Open(path.Join(w.MetadataDir, fmt.Sprintf("%s.plan", indexName)))
+	f, err := os.Open(path.Join(w.MetadataDir, indexName, "plan"))
 	if err != nil {
 		return "", fmt.Errorf("Error reading metadata of index: %s", indexName)
 	}
@@ -159,7 +159,7 @@ func (w *Watcher) findIndexNameOfFile(filePath string) (string, error) {
 }
 
 func (w *Watcher) isPaused(indexName string) (bool, error) {
-	pausedFile := path.Join(w.MetadataDir, fmt.Sprintf("%s.paused", indexName))
+	pausedFile := path.Join(w.MetadataDir, indexName, "paused")
 	_, err := os.Stat(pausedFile)
 	if os.IsNotExist(err) {
 		return false, nil

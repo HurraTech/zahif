@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -36,8 +37,8 @@ type BatchIndexer struct {
 }
 
 func (z *BatchIndexer) BuildIndexPlan() error {
-	z.indexPlanFile = fmt.Sprintf("%s/%s.plan", z.MetadataDir, z.IndexSettings.IndexIdentifier)
-	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexSettings.IndexIdentifier)
+	z.indexPlanFile = path.Join(z.MetadataDir, z.IndexSettings.IndexIdentifier, "plan")
+	z.indexProgressFile = path.Join(z.MetadataDir, z.IndexSettings.IndexIdentifier, "progress")
 
 	_, err := os.Stat(z.indexPlanFile)
 	if os.IsNotExist(err) {
@@ -63,7 +64,7 @@ func (z *BatchIndexer) Index() error {
 }
 
 func (z *BatchIndexer) CheckProgress() (int, int, float64, error) {
-	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexSettings.IndexIdentifier)
+	z.indexProgressFile = path.Join(z.MetadataDir, z.IndexSettings.IndexIdentifier, "progress")
 
 	if _, err := os.Stat(z.indexProgressFile); os.IsNotExist(err) {
 		log.Tracef("Could not find progress file for index %s. Assuming progress is 0", z.IndexSettings.IndexIdentifier)
@@ -86,8 +87,8 @@ func (z *BatchIndexer) CheckProgress() (int, int, float64, error) {
 }
 
 func (z *BatchIndexer) DeleteIndex() error {
-	z.indexPlanFile = fmt.Sprintf("%s/%s.plan", z.MetadataDir, z.IndexSettings.IndexIdentifier)
-	z.indexProgressFile = fmt.Sprintf("%s/%s.progress", z.MetadataDir, z.IndexSettings.IndexIdentifier)
+	z.indexPlanFile = path.Join(z.MetadataDir, z.IndexSettings.IndexIdentifier, "plan")
+	z.indexProgressFile = path.Join(z.MetadataDir, z.IndexSettings.IndexIdentifier, "progress")
 
 	os.Remove(z.indexPlanFile)
 	os.Remove(z.indexProgressFile)

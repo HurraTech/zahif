@@ -27,16 +27,21 @@ func NewBleveBackend(metadataDir string) (*Bleve, error) {
 }
 
 func (b *Bleve) IndexFiles(indexName string, docs []Document) error {
+	log.Debugf("Indexing %d Files using Bulk", len(docs))
+
 	index, err := b.openIndex(indexName)
 	if err != nil {
 		return err
 	}
 
+	log.Debug("Creating new bleve batch")
 	batch := index.NewBatch()
 	for _, d := range docs {
+		log.Debugf("Adding doc %s to batch", d.ID)
 		batch.Index(d.ID, d.Content)
 	}
 
+	log.Debug("Starting bleve batch operation")
 	err = index.Batch(batch)
 	if err != nil {
 		return fmt.Errorf("Bleve error while batch indexing: %s: %v", indexName, err)
@@ -53,10 +58,11 @@ func (b *Bleve) IndexFile(indexName string, d Document) error {
 }
 
 func (b *Bleve) DeleteIndex(indexName string) error {
-	err := os.Remove(b.indexPath(indexName))
+	err := os.RemoveAll(b.indexPath(indexName))
 	if err != nil {
 		return err
 	}
+	delete(b.openIndices, indexName)
 	return nil
 }
 
@@ -83,22 +89,25 @@ func (b *Bleve) SearchIndex(indexName string, query string, from int, limit int)
 }
 
 func (b *Bleve) openIndex(indexName string) (bleve.Index, error) {
-	if index, ok := b.openIndices[indexName]; ok {
-		return index, nil
+	log.Debugf("Opening index %s", indexName)
+	if _, ok := b.openIndices[indexName]; ok {
+		log.Debugf("Index %s already open", indexName)
+		return b.openIndices[indexName], nil
 	}
 
+	var index bleve.Index
 	if _, err := os.Stat(b.indexPath(indexName)); os.IsNotExist(err) {
-		index, err := bleve.New(b.indexPath(indexName), bleve.NewIndexMapping())
+		index, err = bleve.New(b.indexPath(indexName), bleve.NewIndexMapping())
 		if err != nil {
 			return nil, fmt.Errorf("Bleve error while creating new index: %s: %v", indexName, err)
 		}
-		return index, nil
+	} else {
+		index, err = bleve.Open(b.indexPath(indexName))
+		if err != nil {
+			return nil, fmt.Errorf("Bleve error while opening index: %s: %v", indexName, err)
+		}
 	}
 
-	index, err := bleve.Open(b.indexPath(indexName))
-	if err != nil {
-		return nil, fmt.Errorf("Bleve error while opening index: %s: %v", indexName, err)
-	}
 	b.openIndices[indexName] = index
 	return b.openIndices[indexName], nil
 }
