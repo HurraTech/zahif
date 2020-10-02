@@ -14,6 +14,7 @@ import (
 	"hurracloud.io/zahif/internal/backend"
 	"hurracloud.io/zahif/internal/indexer"
 	pb "hurracloud.io/zahif/internal/server/proto"
+	"hurracloud.io/zahif/internal/store"
 	"hurracloud.io/zahif/internal/watcher"
 )
 
@@ -27,7 +28,7 @@ type ZahifServer struct {
 	controlQueue      *goque.Queue
 	interruptChannel  chan string
 	currentRunningJob string
-	store             *store
+	store             *store.Store
 	listen            string
 	port              int
 	parallelism       int
@@ -58,7 +59,7 @@ func NewZahifServer(searchBackend backend.SearchBackend, listen string, port int
 		return nil, fmt.Errorf("Failed to open control queue: %v", err)
 	}
 
-	zahifStore := &store{
+	zahifStore := &store.Store{
 		MetadataDir:      metadataDir,
 		SearchBackend:    searchBackend,
 		InterruptChannel: interruptChannel,
@@ -272,10 +273,10 @@ func (z *ZahifServer) processBatchJobs() {
 		log.Debugf("Processing batch job for index '%s'", indexRequest.IndexIdentifier)
 
 		i, err := z.store.GetBatchIndexer(indexRequest.IndexIdentifier)
-		if err != nil && err != IndexDoesNotExistError {
+		if err != nil && err != store.IndexDoesNotExistError {
 			log.Errorf("Error while checking if this request is resuming existing index: %s", err)
 			continue
-		} else if err == IndexDoesNotExistError {
+		} else if err == store.IndexDoesNotExistError {
 			log.Debugf("This is a request for a new index: %s", indexRequest.IndexIdentifier)
 			settings := &indexer.IndexSettings{
 				Target:          indexRequest.Target,

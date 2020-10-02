@@ -55,10 +55,7 @@ func main() {
 		log.Fatalf("Failed creating zahif server: %v", err)
 	}
 
-	watcher := &watcher.Watcher{
-		MetadataDir: options.MetadataDir,
-		IndexQueue:  s.IndexQueue,
-	}
+	watcher := watcher.New(options.MetadataDir, s.IndexQueue)
 
 	s.Watcher = watcher // to stop watcher on StopWatching requests
 

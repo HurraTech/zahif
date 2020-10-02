@@ -1,7 +1,6 @@
 package watcher
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path"
@@ -10,15 +9,18 @@ import (
 	"time"
 
 	"github.com/beeker1121/goque"
-	"github.com/radovskyb/watcher"
+	rwatcher "github.com/radovskyb/watcher"
 	log "github.com/sirupsen/logrus"
+
+	"hurracloud.io/zahif/internal/store"
 )
 
 type Watcher struct {
 	MetadataDir string
 	IndexQueue  *goque.Queue
 	rootDirMap  map[string]string
-	w           *watcher.Watcher
+	store       *store.Store
+	w           *rwatcher.Watcher
 }
 
 type FileIndexRequest struct {
@@ -26,14 +28,25 @@ type FileIndexRequest struct {
 	IndexIdentifier string
 }
 
+func New(metadataDir string, indexQueue *goque.Queue) *Watcher {
+	return &Watcher{
+		MetadataDir: metadataDir,
+		IndexQueue:  indexQueue,
+		store: &store.Store{
+			MetadataDir: metadataDir,
+		},
+	}
+}
+
 func (w *Watcher) Watch() error {
-	_w := watcher.New()
+	_w := rwatcher.New()
 	w.w = _w
 	w.rootDirMap = map[string]string{}
 
 	if plans, err := filepath.Glob(path.Join(w.MetadataDir, "**", "settings.json")); err == nil {
 		for _, settingsFile := range plans {
 			indexName := path.Dir(settingsFile)
+
 			paused, err := w.isPaused(indexName)
 			if err != nil {
 				log.Warnf("Could not determine if watching %s is paused, will assume not to avoid missing new data: %s", indexName, err)
@@ -45,20 +58,9 @@ func (w *Watcher) Watch() error {
 				continue
 			}
 
-			log.Info("Setting up watcher for index: ", indexName)
-
-			rootDir, err := w.findIndexRootDir(indexName)
-
-			if err != nil {
-				log.Errorf("Error determine watch directory for index %s: %s", indexName, err)
-				continue
+			if err := w.addWatcher(indexName); err != nil {
+				log.Debugf("Could not setup watcher for index: %s: %v", indexName, err)
 			}
-
-			if err := w.w.AddRecursive(rootDir); err != nil {
-				log.Errorf("Could not setup watcher for %s: %s", rootDir, err)
-				continue
-			}
-			log.Debugf("Will watch changes in directory %s for indexing in %s", rootDir, indexName)
 		}
 	}
 
@@ -99,14 +101,7 @@ func (w *Watcher) StopWatching(indexName string) error {
 	}
 	defer f.Close()
 
-	dir, err := w.findIndexRootDir(indexName)
-	if err != nil {
-		return err
-	}
-
-	log.Infof("Pausing watcher for index %s", indexName)
-
-	return w.w.RemoveRecursive(dir)
+	return w.removeWatcher(indexName)
 }
 
 func (w *Watcher) StartOrResumeWatching(indexName string) error {
@@ -119,33 +114,29 @@ func (w *Watcher) StartOrResumeWatching(indexName string) error {
 		}
 	}
 
-	dir, err := w.findIndexRootDir(indexName)
-	if err != nil {
-		return err
-	}
-
-	log.Infof("Resuming watcher for index %s", indexName)
-
-	return w.w.AddRecursive(dir)
+	return w.addWatcher(indexName)
 }
 
-func (w *Watcher) findIndexRootDir(indexName string) (string, error) {
-	f, err := os.Open(path.Join(w.MetadataDir, indexName, "plan"))
+func (w *Watcher) addWatcher(indexName string) error {
+	indexSettings, err := w.store.ReadSettingsFromDisk(indexName)
 	if err != nil {
-		return "", fmt.Errorf("Error reading metadata of index: %s", indexName)
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	var rootDir string
-	if scanner.Scan() {
-		rootDir = scanner.Text()
-		w.rootDirMap[rootDir] = indexName
-		return rootDir, nil
-	} else {
-		return "", fmt.Errorf("Index '%s' metadata file unexpectedly blank", indexName)
+		return fmt.Errorf("Error while reading index metadata. Will not setup watcher: %s: %v", indexName, err)
 	}
 
+	w.rootDirMap[indexSettings.Target] = indexName
+
+	log.Infof("Setting up watcher for index: %s at location: %s", indexName, indexSettings.Target)
+	return w.w.AddRecursive(indexSettings.Target)
+}
+
+func (w *Watcher) removeWatcher(indexName string) error {
+	indexSettings, err := w.store.ReadSettingsFromDisk(indexName)
+	if err != nil {
+		return fmt.Errorf("Error while reading index metadata. Will not setup watcher: %s: %v", indexName, err)
+	}
+
+	log.Info("Removing watcher of index: ", indexName)
+	return w.w.RemoveRecursive(indexSettings.Target)
 }
 
 func (w *Watcher) findIndexNameOfFile(filePath string) (string, error) {

@@ -1,4 +1,4 @@
-package server
+package store
 
 import (
 	"encoding/json"
@@ -18,7 +18,7 @@ var (
 	IndexDoesNotExistError = fmt.Errorf("Index Does Not Exist")
 )
 
-type store struct {
+type Store struct {
 	batchIndexers map[string]*indexer.BatchIndexer
 	fileIndexers  map[string]*indexer.FileIndexer
 
@@ -28,7 +28,7 @@ type store struct {
 	RetriesQueue     *goque.Queue
 }
 
-func (s *store) NewBatchIndexer(settings *indexer.IndexSettings) (*indexer.BatchIndexer, error) {
+func (s *Store) NewBatchIndexer(settings *indexer.IndexSettings) (*indexer.BatchIndexer, error) {
 
 	if s.batchIndexers == nil {
 		s.batchIndexers = make(map[string]*indexer.BatchIndexer)
@@ -59,7 +59,7 @@ func (s *store) NewBatchIndexer(settings *indexer.IndexSettings) (*indexer.Batch
 	return s.batchIndexers[settings.IndexIdentifier], nil
 }
 
-func (s *store) DeleteIndexer(indexName string) {
+func (s *Store) DeleteIndexer(indexName string) {
 	os.RemoveAll(path.Join(s.MetadataDir, indexName))
 
 	// Let's persist that this index has been deleted
@@ -71,7 +71,7 @@ func (s *store) DeleteIndexer(indexName string) {
 	defer f.Close()
 }
 
-func (s *store) GetBatchIndexer(indexName string) (*indexer.BatchIndexer, error) {
+func (s *Store) GetBatchIndexer(indexName string) (*indexer.BatchIndexer, error) {
 	_, err := os.Stat(path.Join(s.MetadataDir, indexName, "settings.json"))
 	if os.IsNotExist(err) {
 		return nil, IndexDoesNotExistError
@@ -80,7 +80,7 @@ func (s *store) GetBatchIndexer(indexName string) (*indexer.BatchIndexer, error)
 	if val, ok := s.batchIndexers[indexName]; ok {
 		return val, nil
 	} else {
-		settings, err := s.readSettingsFromDisk(indexName)
+		settings, err := s.ReadSettingsFromDisk(indexName)
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +88,7 @@ func (s *store) GetBatchIndexer(indexName string) (*indexer.BatchIndexer, error)
 	}
 }
 
-func (s *store) GetFileIndexer(indexName string) (*indexer.FileIndexer, error) {
+func (s *Store) GetFileIndexer(indexName string) (*indexer.FileIndexer, error) {
 	if s.fileIndexers == nil {
 		s.fileIndexers = make(map[string]*indexer.FileIndexer)
 	}
@@ -96,7 +96,7 @@ func (s *store) GetFileIndexer(indexName string) (*indexer.FileIndexer, error) {
 	if val, ok := s.fileIndexers[indexName]; ok {
 		return val, nil
 	} else {
-		settings, err := s.readSettingsFromDisk(indexName)
+		settings, err := s.ReadSettingsFromDisk(indexName)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +109,7 @@ func (s *store) GetFileIndexer(indexName string) (*indexer.FileIndexer, error) {
 	}
 }
 
-func (s *store) IsStaleIndex(indexName string) bool {
+func (s *Store) IsStaleIndex(indexName string) bool {
 	_, err := os.Stat(path.Join(s.MetadataDir, fmt.Sprintf("%s.deleted", indexName)))
 	if os.IsNotExist(err) {
 		return false
@@ -119,7 +119,7 @@ func (s *store) IsStaleIndex(indexName string) bool {
 	return true
 }
 
-func (s *store) saveSettingsToDisk(settings *indexer.IndexSettings) error {
+func (s *Store) saveSettingsToDisk(settings *indexer.IndexSettings) error {
 	log.Debugf("Serializing %v", settings)
 	file, err := json.MarshalIndent(settings, "", " ")
 	if err != nil {
@@ -138,7 +138,7 @@ func (s *store) saveSettingsToDisk(settings *indexer.IndexSettings) error {
 	return nil
 }
 
-func (s *store) readSettingsFromDisk(indexName string) (*indexer.IndexSettings, error) {
+func (s *Store) ReadSettingsFromDisk(indexName string) (*indexer.IndexSettings, error) {
 	file, _ := ioutil.ReadFile(path.Join(s.MetadataDir, indexName, "settings.json"))
 	indexSettings := &indexer.IndexSettings{}
 	err := json.Unmarshal([]byte(file), indexSettings)
