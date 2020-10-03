@@ -6,6 +6,7 @@ import (
 	"path"
 
 	"github.com/blevesearch/bleve"
+	"github.com/blevesearch/blevex/leveldb"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -99,7 +100,8 @@ func (b *Bleve) openIndex(indexName string) (bleve.Index, error) {
 
 	var index bleve.Index
 	if _, err := os.Stat(b.indexPath(indexName)); os.IsNotExist(err) {
-		index, err = bleve.New(b.indexPath(indexName), bleve.NewIndexMapping())
+		// index, err = bleve.New(b.indexPath(indexName), )
+		index, err = bleve.NewUsing(b.indexPath(indexName), bleve.NewIndexMapping(), bleve.Config.DefaultIndexType, leveldb.Name, nil)
 		if err != nil {
 			return nil, fmt.Errorf("Bleve error while creating new index: %s: %v", indexName, err)
 		}
