@@ -106,7 +106,7 @@ func (b *Bleve) openIndex(indexName string) (bleve.Index, error) {
 			return nil, fmt.Errorf("Bleve error while creating new index: %s: %v", indexName, err)
 		}
 	} else {
-		index, err = bleve.Open(b.indexPath(indexName))
+		index, err = bleve.OpenUsing(b.indexPath(indexName), leveldb.Name)
 		if err != nil {
 			return nil, fmt.Errorf("Bleve error while opening index: %s: %v", indexName, err)
 		}
