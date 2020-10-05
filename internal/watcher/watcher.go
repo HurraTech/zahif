@@ -35,6 +35,7 @@ func New(metadataDir string, indexQueue *goque.Queue) *Watcher {
 		store: &store.Store{
 			MetadataDir: metadataDir,
 		},
+		rootDirMap: make(map[string]string),
 	}
 }
 
