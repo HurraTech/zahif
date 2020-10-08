@@ -24,6 +24,7 @@ type ZahifServer struct {
 	IndexQueue        *goque.Queue
 	Watcher           *watcher.Watcher
 	backend           backend.SearchBackend
+	fileSizeThreshold int
 	batchQueue        *goque.Queue
 	controlQueue      *goque.Queue
 	interruptChannel  chan string
@@ -39,7 +40,13 @@ type controlIndexOp struct {
 	IndexIdentifier string
 }
 
-func NewZahifServer(searchBackend backend.SearchBackend, listen string, port int, metadataDir string, parallelism int) (*ZahifServer, error) {
+func NewZahifServer(searchBackend backend.SearchBackend,
+	listen string,
+	port int,
+	metadataDir string,
+	parallelism int,
+	filesizeThreshold int,
+) (*ZahifServer, error) {
 
 	interruptChannel := make(chan string)
 
@@ -60,10 +67,11 @@ func NewZahifServer(searchBackend backend.SearchBackend, listen string, port int
 	}
 
 	zahifStore := &store.Store{
-		MetadataDir:      metadataDir,
-		SearchBackend:    searchBackend,
-		InterruptChannel: interruptChannel,
-		RetriesQueue:     indexQueue,
+		MetadataDir:       metadataDir,
+		SearchBackend:     searchBackend,
+		InterruptChannel:  interruptChannel,
+		RetriesQueue:      indexQueue,
+		FileSizeThreshold: filesizeThreshold,
 	}
 
 	return &ZahifServer{

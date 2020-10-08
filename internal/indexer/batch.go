@@ -28,6 +28,7 @@ type BatchIndexer struct {
 	Backend                 backend.SearchBackend
 	RetriesQueue            *goque.Queue
 	InterruptChannel        <-chan string
+	FileSizeThreshold       int
 	planCurrentPositionByte int64
 	planCurrentPositionLine int
 	indexPlanFile           string
@@ -222,7 +223,7 @@ OUTER:
 			for scanner.Scan() {
 				path := scanner.Text()
 				posLine++
-				if !utils.IsIndexable(path) {
+				if !utils.IsIndexable(path, z.FileSizeThreshold) {
 					continue
 				}
 

@@ -22,10 +22,11 @@ type Store struct {
 	batchIndexers map[string]*indexer.BatchIndexer
 	fileIndexers  map[string]*indexer.FileIndexer
 
-	MetadataDir      string
-	SearchBackend    backend.SearchBackend
-	InterruptChannel <-chan string
-	RetriesQueue     *goque.Queue
+	MetadataDir       string
+	SearchBackend     backend.SearchBackend
+	InterruptChannel  <-chan string
+	RetriesQueue      *goque.Queue
+	FileSizeThreshold int
 }
 
 func (s *Store) NewBatchIndexer(settings *indexer.IndexSettings) (*indexer.BatchIndexer, error) {
@@ -41,10 +42,11 @@ func (s *Store) NewBatchIndexer(settings *indexer.IndexSettings) (*indexer.Batch
 			Parallelism:     settings.Parallelism,
 			ExcludePatterns: settings.ExcludePatterns,
 		},
-		MetadataDir:      s.MetadataDir,
-		Backend:          s.SearchBackend,
-		RetriesQueue:     s.RetriesQueue,
-		InterruptChannel: s.InterruptChannel,
+		MetadataDir:       s.MetadataDir,
+		Backend:           s.SearchBackend,
+		RetriesQueue:      s.RetriesQueue,
+		InterruptChannel:  s.InterruptChannel,
+		FileSizeThreshold: s.FileSizeThreshold,
 	}
 
 	err := s.saveSettingsToDisk(settings)
@@ -102,8 +104,9 @@ func (s *Store) GetFileIndexer(indexName string) (*indexer.FileIndexer, error) {
 		}
 
 		s.fileIndexers[indexName] = &indexer.FileIndexer{
-			Backend:       s.SearchBackend,
-			IndexSettings: settings,
+			Backend:           s.SearchBackend,
+			IndexSettings:     settings,
+			FileSizeThreshold: s.FileSizeThreshold,
 		}
 		return s.fileIndexers[indexName], nil
 	}

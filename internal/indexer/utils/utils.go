@@ -1,24 +1,31 @@
 package utils
 
 import (
+	"os"
+
 	"github.com/gabriel-vasile/mimetype"
 	log "github.com/sirupsen/logrus"
-	"os"
 )
 
-func IsIndexable(path string) bool {
+func IsIndexable(path string, maxFileSize int) bool {
 	log.Tracef("Checking if %v is indexable", path)
-	detectedMIME, err := mimetype.DetectFile(path)
 
 	stat, err := os.Stat(path)
-	if stat != nil {
-		if mode := stat.Mode(); mode.IsDir() {
-			return false // path is a directory
-		}
-	} else {
+	if err != nil {
+		log.Errorf("Could not stat %s. Will assume non-indexable: %s", path, err)
 		return false
 	}
 
+	if mode := stat.Mode(); mode.IsDir() {
+		return false // path is a directory
+	}
+
+	if int(stat.Size()/1024) >= maxFileSize {
+		log.Infof("File %s (size=%d bytes) is larger than threshold %dMB, will not index", path, stat.Size(), maxFileSize)
+		return false
+	}
+
+	detectedMIME, err := mimetype.DetectFile(path)
 	if err != nil {
 		log.Warningf("Could not detect MIME for %s. Assuming file is indexable", path)
 		return true // could not detect MIME; let's index anyway

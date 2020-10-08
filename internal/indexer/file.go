@@ -10,14 +10,15 @@ import (
 )
 
 type FileIndexer struct {
-	Backend       backend.SearchBackend
-	IndexSettings *IndexSettings
+	Backend           backend.SearchBackend
+	IndexSettings     *IndexSettings
+	FileSizeThreshold int
 }
 
 func (i *FileIndexer) IndexFile(filePath string) error {
 	log.Tracef("Indexing %s in %s", filePath, i.IndexSettings.IndexIdentifier)
 
-	if !utils.IsIndexable(filePath) {
+	if !utils.IsIndexable(filePath, i.FileSizeThreshold) {
 		log.Tracef("File not indexable, skipping: %s", filePath)
 		return nil
 	}
