@@ -7,7 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func IsIndexable(path string, maxFileSize int) bool {
+func IsIndexable(path string, maxFileSizeMB int) bool {
 	log.Tracef("Checking if %v is indexable", path)
 
 	stat, err := os.Stat(path)
@@ -20,8 +20,8 @@ func IsIndexable(path string, maxFileSize int) bool {
 		return false // path is a directory
 	}
 
-	if int(stat.Size()/1024) >= maxFileSize {
-		log.Infof("File %s (size=%d bytes) is larger than threshold %dMB, will not index", path, stat.Size(), maxFileSize)
+	if int(stat.Size()/(1024*1024)) >= maxFileSizeMB {
+		log.Infof("File %s (size=%d bytes) is larger than threshold %dMB, will not index", path, stat.Size(), maxFileSizeMB)
 		return false
 	}
 
