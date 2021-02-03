@@ -8,7 +8,7 @@ require (
 	github.com/blevesearch/blevex v0.0.0-20190916190636-152f0fe5c040
 	github.com/expectedsh/go-sonic v0.0.0-20200417165347-1cfe7c425fff
 	github.com/gabriel-vasile/mimetype v1.1.1
-	github.com/golang/protobuf v1.3.3
+	github.com/golang/protobuf v1.4.1
 	github.com/h2non/filetype v1.1.0 // indirect
 	github.com/jessevdk/go-flags v1.4.0
 	github.com/jmhodges/levigo v1.0.0 // indirect
@@ -19,4 +19,5 @@ require (
 	github.com/syndtr/goleveldb v1.0.0 // indirect
 	google.golang.org/appengine v1.4.0
 	google.golang.org/grpc v1.32.0
+	google.golang.org/protobuf v1.25.0
 )
