@@ -9,7 +9,7 @@ import (
 )
 
 type Options struct {
-	Parallelism       int    `short:"p" long:"parallelism" env:"PARALLELISM" description:"How many parallel indexing threads" default:"2"`
+	Parallelism       int    `short:"p" long:"parallelism" env:"PARALLELISM" description:"How many parallel indexing threads" default:"20"`
 	MetadataDir       string `short:"d" long:"metadta_dir" env:"METADATA_DIR" description:"Where to store metadta about indices" default:"."`
 	Backend           string `short:"b" long:"backend" env:"BACKEND" description:"Which backend to use, sonic or bleve" default:"bleve"`
 	SonicHost         string `short:"h" long:"sonic_host" env:"SONIC_HOST" description:"Sonic server host" default:"127.0.0.1"`
